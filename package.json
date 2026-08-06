@@ -9,6 +9,7 @@
   },
   "packageManager": "pnpm@11.18.0",
   "scripts": {
+    "prepare": "pnpm --filter @va/shared --filter @va/db run build",
     "dev": "pnpm -r --if-present --parallel run dev",
     "build": "pnpm -r --if-present run build",
     "lint": "eslint .",
@@ -19,6 +20,8 @@
     "test": "pnpm -r --if-present run test",
     "db:up": "pnpm -r --if-present run db:up",
     "db:down": "pnpm -r --if-present run db:down",
+    "db:status": "pnpm -r --if-present run db:status",
+    "db:generate": "pnpm -r --if-present run db:generate",
     "db:migrate": "pnpm -r --if-present run db:migrate",
     "db:seed": "pnpm -r --if-present run db:seed",
     "db:reset": "pnpm -r --if-present run db:reset"
