@@ -1,0 +1,7 @@
+# Firmware ESP32 + RC522 — track paralelo (aún sin código).
+# Los secretos del dispositivo (SSID, contraseña, API key) NUNCA se versionan.
+secrets.h
+**/secrets.h
+.pio/
+.pioenvs/
+.piolibdeps/
