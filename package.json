@@ -2,12 +2,34 @@
   "name": "vision-attendance",
   "version": "0.1.0",
   "private": true,
-  "scripts": {
-    "dev": "pnpm --filter web dev",
-    "build": "pnpm --filter web build",
-    "start": "pnpm --filter web start",
-    "lint": "pnpm --filter web lint",
-    "typecheck": "pnpm --filter web typecheck"
+  "description": "Sistema de registro de asistencia mediante RFID — Institución Universitaria Visión de las Américas",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
   },
-  "packageManager": "pnpm@11"
+  "packageManager": "pnpm@11.18.0",
+  "scripts": {
+    "dev": "pnpm -r --if-present --parallel run dev",
+    "build": "pnpm -r --if-present run build",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "pnpm -r --if-present run typecheck",
+    "test": "pnpm -r --if-present run test",
+    "db:up": "pnpm -r --if-present run db:up",
+    "db:down": "pnpm -r --if-present run db:down",
+    "db:migrate": "pnpm -r --if-present run db:migrate",
+    "db:seed": "pnpm -r --if-present run db:seed",
+    "db:reset": "pnpm -r --if-present run db:reset"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.8.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.9.0",
+    "prettier": "^3.9.6",
+    "typescript": "5.9.3",
+    "typescript-eslint": "^8.66.0"
+  }
 }
