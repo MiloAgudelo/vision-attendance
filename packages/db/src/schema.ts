@@ -112,7 +112,11 @@ const createdAt = () => timestamp('created_at', { withTimezone: true }).notNull(
 /* users — cuentas web (admin, profesor)                                       */
 /* -------------------------------------------------------------------------- */
 
-/** El `id` coincide con `auth.users.id` de Supabase Auth cuando la cuenta nace de Auth. */
+/**
+ * El `id` ES el `auth.users.id` de Supabase Auth (`data-model.md`): SIEMPRE se pasa explícito al
+ * insertar una cuenta creada desde Auth. El default `gen_random_uuid()` existe solo para las filas
+ * de desarrollo del seed; una fila con id generado aquí nunca podrá iniciar sesión.
+ */
 export const users = pgTable('users', {
   id: primaryId(),
   email: text('email').notNull().unique(),
@@ -169,10 +173,17 @@ export const cards = pgTable(
 /* subjects · groups · enrollments · schedules                                 */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * `status` no aparece en la tabla de `data-model.md`, pero sí en su regla general de eliminación
+ * («soft-delete por `status` en entidades de dominio»). Se añade aquí, en la migración inicial,
+ * porque después de F1 solo W4 puede migrar: sin esta columna, W1 no podría desactivar una materia
+ * sin pedirle una migración a otra lane. `docs/data-model.md` se actualizó en el mismo commit.
+ */
 export const subjects = pgTable('subjects', {
   id: primaryId(),
   code: text('code').notNull().unique(),
   name: text('name').notNull(),
+  status: recordStatus('status').notNull().default('active'),
   createdAt: createdAt(),
 });
 

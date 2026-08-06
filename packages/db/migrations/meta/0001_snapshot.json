@@ -1207,6 +1207,14 @@
           "primaryKey": false,
           "notNull": true
         },
+        "status": {
+          "name": "status",
+          "type": "record_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'active'"
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
