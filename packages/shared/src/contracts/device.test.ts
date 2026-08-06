@@ -5,8 +5,13 @@ import {
   DEVICE_ERROR_CODES,
   DEVICE_ERROR_HTTP_STATUS,
   DEVICE_EVENTS_PATH,
+  DEVICE_NAME_MAX_LENGTH,
   InvalidCardUidError,
+  InvalidDeviceNameError,
   cardUidSchema,
+  contractVersionProbeSchema,
+  deviceNameSchema,
+  isValidDeviceName,
   deviceEventErrorResponseSchema,
   deviceEventRequestSchema,
   deviceEventResponseSchema,
@@ -84,6 +89,9 @@ describe('isValidCardUid', () => {
     ['a1b2c3d4', 'minúsculas'],
     ['A1B2C3D', '7 caracteres (ni 4 ni 7 bytes)'],
     ['A1B2C3D4E', '9 caracteres'],
+    ['A1B2C3D4E5', '10 caracteres'],
+    ['A1B2C3D4E5F6A', '13 caracteres'],
+    ['A1B2C3D4E5F6A7B', '15 caracteres'],
     ['A1B2C3D4E5F6A7B8', '16 caracteres'],
     ['A1B2C3G4', 'carácter no hexadecimal'],
     ['A1:B2:C3:D4', 'con separadores'],
@@ -120,8 +128,21 @@ describe('cardUidSchema', () => {
     expect(cardUidSchema.parse('a1:b2:c3:d4')).toBe('A1B2C3D4');
   });
 
-  it('rechaza longitudes fuera de 8 o 14', () => {
-    expect(cardUidSchema.safeParse('A1B2C3').success).toBe(false);
+  it.each(['A1B2C3', 'A1B2C3D4E5', 'A1B2C3D4E5F6A', 'A1B2C3D4E5F6A7B'])(
+    'rechaza la longitud de %s',
+    (uid) => {
+      expect(cardUidSchema.safeParse(uid).success).toBe(false);
+    },
+  );
+
+  // La política de separadores es lo único no evidente del normalizador: se descartan SIEMPRE, así
+  // que lo que decide la validez es la longitud de lo que queda, no la de la cadena original.
+  it('descarta los separadores sobrantes antes de medir la longitud', () => {
+    expect(cardUidSchema.parse('A1-B2-C3-D4-')).toBe('A1B2C3D4');
+  });
+
+  it('rechaza una cadena que solo son separadores', () => {
+    expect(cardUidSchema.safeParse('--------').success).toBe(false);
   });
 });
 
@@ -292,4 +313,81 @@ describe('credencial del dispositivo', () => {
       expect(isDeviceApiKeyShaped(value)).toBe(false);
     },
   );
+
+  // Sin esta comprobación, un nombre que la tabla `devices` admite (text libre) produciría en
+  // silencio una credencial que el propio validador rechaza y que ni siquiera es un token Bearer
+  // válido; el fallo aparecería en el primer POST del lector, no al dar de alta el dispositivo.
+  it.each([
+    ['Lab 01', 'espacio'],
+    ['aula.1', 'punto'],
+    ['LAB_01', 'guion bajo, que es el separador de la credencial'],
+    ['Ñ1', 'fuera de US-ASCII'],
+    ['', 'vacío'],
+  ])('lanza InvalidDeviceNameError con el nombre %s (%s)', (name) => {
+    expect(() => formatDeviceApiKey(name, 'a'.repeat(32))).toThrow(InvalidDeviceNameError);
+  });
+
+  it('el error conserva el nombre original', () => {
+    try {
+      formatDeviceApiKey('Lab 01', 'a'.repeat(32));
+      expect.unreachable('debería haber lanzado');
+    } catch (error) {
+      expect(error).toBeInstanceOf(InvalidDeviceNameError);
+      expect((error as InvalidDeviceNameError).rawValue).toBe('Lab 01');
+    }
+  });
+
+  it('todo nombre aceptado por deviceNameSchema forma una credencial válida', () => {
+    for (const name of ['LAB-DESARROLLO-01', 'a', 'A1', 'x'.repeat(DEVICE_NAME_MAX_LENGTH)]) {
+      expect(deviceNameSchema.safeParse(name).success).toBe(true);
+      expect(isValidDeviceName(name)).toBe(true);
+      expect(isDeviceApiKeyShaped(formatDeviceApiKey(name, 'a'.repeat(32)))).toBe(true);
+    }
+  });
+
+  it('deviceNameSchema rechaza por encima del máximo', () => {
+    expect(deviceNameSchema.safeParse('x'.repeat(DEVICE_NAME_MAX_LENGTH + 1)).success).toBe(false);
+  });
+});
+
+describe('contractVersionProbeSchema', () => {
+  // El contrato exige distinguir `unsupported_contract` de `invalid_payload`, y con el esquema
+  // completo un contractVersion incompatible es indistinguible de cualquier otro fallo.
+  it('lee la versión aunque el resto del cuerpo sea inválido', () => {
+    const probe = contractVersionProbeSchema.safeParse({ contractVersion: 2, basura: true });
+    expect(probe.success).toBe(true);
+    expect(probe.success && probe.data.contractVersion).toBe(2);
+    expect(isSupportedContractVersion(2)).toBe(false);
+  });
+
+  it('acepta la versión soportada del ejemplo del contrato', () => {
+    const probe = contractVersionProbeSchema.safeParse(VALID_REQUEST);
+    expect(probe.success && isSupportedContractVersion(probe.data.contractVersion)).toBe(true);
+  });
+
+  it.each([{}, { contractVersion: '1' }, { contractVersion: 1.5 }])(
+    'rechaza el cuerpo sin versión entera %j',
+    (body) => {
+      expect(contractVersionProbeSchema.safeParse(body).success).toBe(false);
+    },
+  );
+});
+
+describe('canonización de la petición', () => {
+  // (device_id, event_id) es la clave de idempotencia (RN7) y se almacena como texto: si la caja del
+  // uuid sobreviviera, el mismo reintento en mayúsculas crearía un segundo evento.
+  it('canoniza el eventId a minúsculas', () => {
+    const parsed = deviceEventRequestSchema.parse({
+      ...VALID_REQUEST,
+      eventId: '5F3A2C9E-8D41-4B7A-9C1E-2A6F8E4D0B73',
+    });
+    expect(parsed.eventId).toBe('5f3a2c9e-8d41-4b7a-9c1e-2a6f8e4d0b73');
+  });
+
+  it.each([
+    ['scannedAt', { scannedAt: null }],
+    ['firmwareVersion', { firmwareVersion: null }],
+  ])('acepta %s en null, que el firmware puede serializar así', (_campo, patch) => {
+    expect(deviceEventRequestSchema.safeParse({ ...VALID_REQUEST, ...patch }).success).toBe(true);
+  });
 });
