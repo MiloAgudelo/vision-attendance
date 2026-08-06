@@ -6,7 +6,7 @@
 
 import { z } from 'zod';
 
-import { validationError, type FieldErrors } from './errors.js';
+import { validationError, type FieldErrors } from './errors';
 
 /** Texto obligatorio ya recortado, con mensajes propios de cada campo. */
 export function requiredText(options: {

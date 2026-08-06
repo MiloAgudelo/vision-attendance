@@ -8,7 +8,7 @@ import {
   translateDatabaseError,
   validationError,
   withTranslatedErrors,
-} from './errors.js';
+} from './errors';
 
 /** Imita la forma con la que postgres.js reporta una violación de restricción. */
 function postgresError(code: string, constraintName: string): Error {
