@@ -8,6 +8,9 @@ pnpm-lock.yaml
 packages/db/migrations
 firmware
 
+# Generado por Next.js
+next-env.d.ts
+
 # Documentación normativa: propiedad del orquestador/humano, no se reformatea
 docs
 alcance-inicial.md
