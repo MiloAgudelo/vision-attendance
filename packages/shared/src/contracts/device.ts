@@ -88,8 +88,57 @@ export const cardUidSchema = z.string().trim().transform(normalizeCardUid).refin
 /** Forma de la API key del dispositivo: `vad_<deviceName>_<secreto>`. */
 const DEVICE_API_KEY = /^vad_[A-Za-z0-9-]+_[A-Za-z0-9_-]{16,}$/;
 
-/** Construye una credencial con la forma del contrato. */
+/** Longitud máxima del nombre de un dispositivo (`devices.name`). */
+export const DEVICE_NAME_MAX_LENGTH = 120;
+
+/**
+ * Nombre de dispositivo admisible.
+ *
+ * El nombre viaja DENTRO de la credencial (`vad_<deviceName>_<secreto>`), que a su vez viaja en una
+ * cabecera `Authorization`. Por eso no puede contener el separador `_`, ni espacios, ni caracteres
+ * fuera de US-ASCII: se restringe a letras, dígitos y guiones (ej. `LAB-DESARROLLO-01`).
+ */
+const DEVICE_NAME = /^[A-Za-z0-9-]+$/;
+
+/** ¿El nombre sirve para construir una credencial válida? */
+export function isValidDeviceName(value: string): boolean {
+  return value.length <= DEVICE_NAME_MAX_LENGTH && DEVICE_NAME.test(value);
+}
+
+/** Error lanzado por {@link formatDeviceApiKey} cuando el nombre no puede formar una credencial. */
+export class InvalidDeviceNameError extends Error {
+  readonly rawValue: string;
+
+  constructor(rawValue: string) {
+    super(
+      `Nombre de dispositivo inválido: solo se admiten letras, dígitos y guiones ` +
+        `(máximo ${DEVICE_NAME_MAX_LENGTH} caracteres); se recibió ${JSON.stringify(rawValue)}`,
+    );
+    this.name = 'InvalidDeviceNameError';
+    this.rawValue = rawValue;
+  }
+}
+
+/** Zod: nombre de dispositivo, aplicable al alta en el CRUD de dispositivos (W2). */
+export const deviceNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(DEVICE_NAME_MAX_LENGTH)
+  .refine(isValidDeviceName, {
+    message: 'El nombre solo admite letras, dígitos y guiones (sin espacios ni guion bajo)',
+  });
+
+/**
+ * Construye una credencial con la forma del contrato.
+ *
+ * @throws {InvalidDeviceNameError} si el nombre no puede formar una credencial válida. Falla aquí,
+ * al crear el dispositivo, y no en el primer POST del lector.
+ */
 export function formatDeviceApiKey(deviceName: string, secret: string): string {
+  if (!isValidDeviceName(deviceName)) {
+    throw new InvalidDeviceNameError(deviceName);
+  }
   return `${DEVICE_API_KEY_PREFIX}_${deviceName}_${secret}`;
 }
 
@@ -108,6 +157,19 @@ export function isSupportedContractVersion(version: number): boolean {
 }
 
 /**
+ * Sonda de versión: se valida ANTES que el cuerpo completo.
+ *
+ * El contrato distingue dos errores 400 (`docs/device-contract.md`): `unsupported_contract` cuando
+ * la versión mayor es incompatible e `invalid_payload` para el resto. Con
+ * {@link deviceEventRequestSchema} solo, un `contractVersion: 2` es indistinguible de un cuerpo
+ * malformado. El servidor (W2) lee primero esta sonda, decide `unsupported_contract` si procede, y
+ * solo entonces valida el cuerpo completo.
+ */
+export const contractVersionProbeSchema = z.looseObject({
+  contractVersion: z.number().int(),
+});
+
+/**
  * Cuerpo de `POST /api/v1/events`.
  *
  * Las claves desconocidas se descartan (no se rechaza la petición) para que un firmware más nuevo
@@ -115,11 +177,15 @@ export function isSupportedContractVersion(version: number): boolean {
  */
 export const deviceEventRequestSchema = z.object({
   contractVersion: z.literal(CONTRACT_VERSION),
-  deviceId: z.string().trim().min(1).max(120),
-  eventId: z.uuid(),
+  deviceId: z.string().trim().min(1).max(DEVICE_NAME_MAX_LENGTH),
+  // Se canoniza a minúsculas: `(device_id, event_id)` es la clave de idempotencia (RN7) y se
+  // almacena como texto, así que el mismo UUID reenviado con otra caja debe colisionar, no duplicar.
+  eventId: z.uuid().transform((value) => value.toLowerCase()),
   cardUid: cardUidSchema,
   scannedAt: z.iso.datetime({ offset: true }).nullish(),
-  firmwareVersion: z.string().trim().min(1).max(64).optional(),
+  // `nullish` igual que scannedAt: un firmware que serialice los campos ausentes como null no debe
+  // recibir 400 por un dato meramente informativo.
+  firmwareVersion: z.string().trim().min(1).max(64).nullish(),
 });
 
 export type DeviceEventRequest = z.infer<typeof deviceEventRequestSchema>;
