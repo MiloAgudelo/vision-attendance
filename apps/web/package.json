@@ -1,0 +1,32 @@
+{
+  "name": "@va/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Aplicación Next.js: interfaz en español y API de dispositivos.",
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "next typegen && tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@va/db": "workspace:*",
+    "@va/shared": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "next": "^16.3.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "tailwindcss": "^4.3.3",
+    "typescript": "5.9.3",
+    "vitest": "^4.1.10"
+  }
+}
