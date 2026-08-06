@@ -12,9 +12,9 @@ import { enrollments, groups, schedules, subjects, users } from '@va/db';
 import { and, asc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
-import { resolveDatabase, type AcademicDatabase } from './database.js';
-import { notFoundError, withTranslatedErrors } from './errors.js';
-import { identifier, parseInput, requiredText } from './validation.js';
+import { resolveDatabase, type AcademicDatabase } from './database';
+import { notFoundError, withTranslatedErrors } from './errors';
+import { identifier, parseInput, requiredText } from './validation';
 
 /* -------------------------------------------------------------------------- */
 /* Validación                                                                  */

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { SUBJECT_NAME_MAX_LENGTH, subjectInputSchema } from './subjects.js';
+import { SUBJECT_NAME_MAX_LENGTH, subjectInputSchema } from './subjects';
 
 describe('subjectInputSchema — casos válidos', () => {
   it('acepta una materia con código y nombre', () => {

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { isDomainError } from './errors.js';
-import { STUDENT_CODE_MAX_LENGTH, studentInputSchema } from './students.js';
-import { parseInput } from './validation.js';
+import { isDomainError } from './errors';
+import { STUDENT_CODE_MAX_LENGTH, studentInputSchema } from './students';
+import { parseInput } from './validation';
 
 describe('studentInputSchema — casos válidos', () => {
   it('acepta un estudiante con código y nombre', () => {

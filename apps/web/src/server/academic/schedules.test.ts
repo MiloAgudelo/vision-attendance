@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { WEEKDAYS, normalizeTimeOfDay, scheduleInputSchema, weekdayLabel } from './schedules.js';
+import { WEEKDAYS, normalizeTimeOfDay, scheduleInputSchema, weekdayLabel } from './schedules';
 
 const GROUP_ID = '55555555-5555-4555-8555-555555555555';
 

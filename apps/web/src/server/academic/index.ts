@@ -5,11 +5,11 @@
  * (`docs/architecture.md` §3). Es la única puerta de entrada a estos datos para la interfaz.
  */
 
-export * from './database.js';
-export * from './enrollments.js';
-export * from './errors.js';
-export * from './groups.js';
-export * from './schedules.js';
-export * from './students.js';
-export * from './subjects.js';
-export * from './validation.js';
+export * from './database';
+export * from './enrollments';
+export * from './errors';
+export * from './groups';
+export * from './schedules';
+export * from './students';
+export * from './subjects';
+export * from './validation';

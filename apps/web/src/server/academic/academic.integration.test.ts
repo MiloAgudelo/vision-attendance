@@ -30,12 +30,12 @@ import {
   listEnrollableStudents,
   listEnrollments,
   withdrawStudent,
-} from './enrollments.js';
-import { DomainError, translateDatabaseError } from './errors.js';
-import { createGroup, deactivateGroup, getGroup, listGroups, updateGroup } from './groups.js';
-import { addSchedule, listSchedulesByGroup, removeSchedule } from './schedules.js';
-import { createStudent, deactivateStudent, listStudents } from './students.js';
-import { createSubject, deactivateSubject, listSubjects } from './subjects.js';
+} from './enrollments';
+import { DomainError, translateDatabaseError } from './errors';
+import { createGroup, deactivateGroup, getGroup, listGroups, updateGroup } from './groups';
+import { addSchedule, listSchedulesByGroup, removeSchedule } from './schedules';
+import { createStudent, deactivateStudent, listStudents } from './students';
+import { createSubject, deactivateSubject, listSubjects } from './subjects';
 
 let db: Database;
 

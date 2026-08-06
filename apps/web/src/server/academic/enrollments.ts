@@ -13,9 +13,9 @@ import { enrollments, students } from '@va/db';
 import { and, asc, eq, notExists } from 'drizzle-orm';
 import { z } from 'zod';
 
-import { resolveDatabase, type AcademicDatabase } from './database.js';
-import { conflictError, notFoundError, withTranslatedErrors } from './errors.js';
-import { identifier, parseInput } from './validation.js';
+import { resolveDatabase, type AcademicDatabase } from './database';
+import { conflictError, notFoundError, withTranslatedErrors } from './errors';
+import { identifier, parseInput } from './validation';
 
 /* -------------------------------------------------------------------------- */
 /* Validación                                                                  */

@@ -15,9 +15,9 @@ import { groups, schedules, subjects } from '@va/db';
 import { and, asc, eq } from 'drizzle-orm';
 import { z } from 'zod';
 
-import { resolveDatabase, type AcademicDatabase } from './database.js';
-import { notFoundError, withTranslatedErrors } from './errors.js';
-import { identifier, optionalText, parseInput } from './validation.js';
+import { resolveDatabase, type AcademicDatabase } from './database';
+import { notFoundError, withTranslatedErrors } from './errors';
+import { identifier, optionalText, parseInput } from './validation';
 
 /* -------------------------------------------------------------------------- */
 /* Días de la semana (ISO-8601)                                                */
