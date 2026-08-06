@@ -1,0 +1,61 @@
+{
+  "name": "@va/db",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Esquema Drizzle, migraciones SQL versionadas y cliente de PostgreSQL. Importa @va/shared solo para tipos.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./schema": {
+      "types": "./dist/schema.d.ts",
+      "import": "./dist/schema.js",
+      "default": "./dist/schema.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "migrations"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:up": "node scripts/pg.mjs up",
+    "db:down": "node scripts/pg.mjs down",
+    "db:status": "node scripts/pg.mjs status",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "tsx src/migrate.ts",
+    "db:seed": "tsx src/seed.ts",
+    "db:reset": "node scripts/pg.mjs reset && pnpm run db:migrate && pnpm run db:seed",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\""
+  },
+  "dependencies": {
+    "@va/shared": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "postgres": "^3.4.9"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "drizzle-kit": "^0.31.10",
+    "embedded-postgres": "17.10.0-beta.17",
+    "tsx": "^4.21.1",
+    "typescript": "5.9.3",
+    "vitest": "^4.1.10"
+  },
+  "optionalDependencies": {
+    "@embedded-postgres/darwin-arm64": "17.10.0-beta.17",
+    "@embedded-postgres/darwin-x64": "17.10.0-beta.17",
+    "@embedded-postgres/linux-arm64": "17.10.0-beta.17",
+    "@embedded-postgres/linux-x64": "17.10.0-beta.17",
+    "@embedded-postgres/windows-x64": "17.10.0-beta.17"
+  }
+}
