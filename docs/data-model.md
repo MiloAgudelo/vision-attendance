@@ -38,7 +38,9 @@ Convenciones: ids `uuid` (default `gen_random_uuid()`), timestamps `timestamptz`
 Índice: `UNIQUE (uid) WHERE status = 'active'` (parcial: permite historial de reasignación). Resolución de carnet = buscar uid activo.
 
 ### `subjects`
-`id` uuid PK · `code` text UNIQUE NOT NULL · `name` text NOT NULL · `created_at`.
+`id` uuid PK · `code` text UNIQUE NOT NULL · `name` text NOT NULL · `status` record_status default 'active' · `created_at`.
+
+> `status` se añadió en la migración inicial (F1): la regla general de este documento es soft-delete por `status` en las entidades de dominio, y tras F1 solo W4 puede migrar, así que W1 no podría desactivar una materia sin pedir una migración a otra lane.
 
 ### `groups`
 | Columna | Tipo | Notas |
@@ -50,13 +52,14 @@ Convenciones: ids `uuid` (default `gen_random_uuid()`), timestamps `timestamptz`
 | teacher_id | uuid FK → users NULL | |
 | session_window_minutes | int NOT NULL default 60 | RN2: minutos antes del inicio en que se aceptan escaneos |
 | status | record_status | |
+| created_at | timestamptz default now() | |
 | UNIQUE(subject_id, name, term) | | |
 
 ### `enrollments` — la entidad que faltaba en el borrador
 `id` PK · `group_id` FK NOT NULL · `student_id` FK NOT NULL · `status` record_status · `created_at` · **UNIQUE(group_id, student_id)**.
 
 ### `schedules` — horario semanal en hora local America/Bogota
-`id` PK · `group_id` FK NOT NULL · `weekday` smallint NOT NULL CHECK 1–7 (1=lunes, ISO) · `start_time` time NOT NULL · `end_time` time NOT NULL CHECK (> start_time) · `room` text NULL (texto simple en MVP).
+`id` PK · `group_id` FK NOT NULL · `weekday` smallint NOT NULL CHECK 1–7 (1=lunes, ISO) · `start_time` time NOT NULL · `end_time` time NOT NULL CHECK (> start_time) · `room` text NULL (texto simple en MVP) · `created_at`.
 
 ### `class_sessions` — creadas perezosamente (RN3)
 | Columna | Tipo | Notas |
@@ -74,11 +77,12 @@ Convenciones: ids `uuid` (default `gen_random_uuid()`), timestamps `timestamptz`
 | Columna | Tipo | Notas |
 |---|---|---|
 | id | uuid PK | |
-| name | text UNIQUE NOT NULL | ej. "LAB-DESARROLLO-01" |
+| name | text UNIQUE NOT NULL | ej. "LAB-DESARROLLO-01". Solo letras, dígitos y guiones: el nombre viaja dentro de la credencial `vad_<name>_<secreto>`, donde `_` es el separador (validado por `deviceNameSchema` en `@va/shared`) |
 | api_key_hash | text NOT NULL | SHA-256 de la key; la key en claro solo se muestra al crearla |
 | mode | enum `device_mode` ('normal','enrollment') default 'normal' | |
 | status | enum `device_status` ('active','revoked') default 'active' | |
 | room | text NULL · last_seen_at timestamptz NULL · firmware_version text NULL | |
+| created_at | timestamptz default now() | |
 
 ### `rfid_events` — bitácora inmutable; ES el "registro de a qué hora entró" (RN1)
 | Columna | Tipo | Notas |
