@@ -1,0 +1,38 @@
+# Dependencias
+node_modules/
+.pnpm-store/
+
+# Artefactos de build
+dist/
+build/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+
+# Pruebas
+coverage/
+
+# Base de datos local (PostgreSQL embebido)
+.pgdata/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Variables de entorno (el ejemplo SÍ se versiona)
+.env
+.env.local
+.env*.local
+!.env.example
+
+# Secretos del firmware
+firmware/**/secrets.h
+
+# Sistema operativo / editores
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/extensions.json
+.idea/

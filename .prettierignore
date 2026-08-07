@@ -1,0 +1,13 @@
+node_modules
+dist
+.next
+coverage
+.turbo
+.pgdata
+pnpm-lock.yaml
+packages/db/migrations
+firmware
+
+# Documentación normativa: propiedad del orquestador/humano, no se reformatea
+docs
+alcance-inicial.md
