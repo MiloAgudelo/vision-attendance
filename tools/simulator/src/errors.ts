@@ -81,6 +81,35 @@ export class ContractViolationError extends SimulatorError {
   }
 }
 
+/**
+ * El servidor rompió la idempotencia (RN7): un `eventId` ya procesado debe devolver **la respuesta
+ * original almacenada, byte a byte**, y este reenvío devolvió otra cosa.
+ *
+ * Es el defecto que el simulador existe para detectar. El caso típico es un servidor que reprocesa
+ * el evento en vez de releer `rfid_events.response`, y responde `already_registered` donde la
+ * primera vez respondió `registered`.
+ */
+export class IdempotencyViolationError extends SimulatorError {
+  readonly eventId: string;
+  readonly index: number;
+  readonly first: unknown;
+  readonly received: unknown;
+
+  constructor(params: { eventId: string; index: number; first: unknown; received: unknown }) {
+    super(
+      `El reenvío ${params.index + 1} del evento ${params.eventId} devolvió una respuesta distinta ` +
+        `de la original, y el contrato v1 exige que sea idéntica (RN7).\n` +
+        `  original: ${JSON.stringify(params.first)}\n` +
+        `  recibida: ${JSON.stringify(params.received)}`,
+    );
+    this.name = 'IdempotencyViolationError';
+    this.eventId = params.eventId;
+    this.index = params.index;
+    this.first = params.first;
+    this.received = params.received;
+  }
+}
+
 /** No se logró obtener respuesta del servidor tras agotar los reintentos del contrato. */
 export class TransportError extends SimulatorError {
   readonly attempts: readonly SendAttempt[];

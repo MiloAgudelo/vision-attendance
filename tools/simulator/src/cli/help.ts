@@ -50,23 +50,33 @@ Ejemplos
   ${INVOCATION} enviar --uid a1:b2:c3:d4 --scanned-at-offset -3h --expect registered
   ${INVOCATION} enviar --uid A1B2C3D4 --scanned-at null   # dispositivo sin reloj fiable`,
 
-  repetir: `Uso: ${INVOCATION} repetir --uid <hex> [--count <n>] [--delay <ms>] [opciones]
+  repetir: `Uso: ${INVOCATION} repetir --uid <hex> [--count <n>] [--delay <ms>] [--concurrentes] [opciones]
 
 Envía la MISMA lectura (mismo "eventId") varias veces: la prueba de idempotencia de RN7. El
-servidor debe devolver la respuesta original almacenada y no duplicar la asistencia.
+servidor debe devolver la respuesta original almacenada, IDÉNTICA, y no duplicar la asistencia.
+El simulador compara las respuestas entre sí y falla si alguna difiere de la primera.
 Por defecto --count 3.
 
-Ejemplo
-  ${INVOCATION} repetir --uid A1B2C3D4 --count 3 --expect registered`,
+  --delay <ms>      Espera entre reenvíos consecutivos.
+  --concurrentes    Lanza los reenvíos a la vez, para provocar la carrera de dos peticiones con el
+                    mismo "eventId" llegando simultáneamente. Incompatible con --delay.
 
-  rafaga: `Uso: ${INVOCATION} rafaga [--count <n>] [--delay <ms>] [opciones]
+Ejemplos
+  ${INVOCATION} repetir --uid A1B2C3D4 --count 3 --expect registered
+  ${INVOCATION} repetir --uid A1B2C3D4 --count 5 --concurrentes`,
+
+  rafaga: `Uso: ${INVOCATION} rafaga [--count <n>] [--delay <ms>] [--concurrentes] [opciones]
 
 Envía N lecturas DISTINTAS (UID y "eventId" nuevos en cada una) con un retardo entre ellas, como
 una fila de estudiantes entrando a clase. Por defecto --count 5 --delay 500.
 No admite --uid ni --event-id.
 
-Ejemplo
-  ${INVOCATION} rafaga --count 10 --delay 200 --bytes 7`,
+  --concurrentes    Lanza las N lecturas a la vez, para poner a prueba la creación perezosa de la
+                    sesión bajo concurrencia. Incompatible con --delay.
+
+Ejemplos
+  ${INVOCATION} rafaga --count 10 --delay 200 --bytes 7
+  ${INVOCATION} rafaga --count 10 --concurrentes`,
 
   reintentar: `Uso: ${INVOCATION} reintentar --uid <hex> [opciones]
 

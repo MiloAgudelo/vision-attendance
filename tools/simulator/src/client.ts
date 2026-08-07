@@ -22,6 +22,7 @@ import {
 import { backoffForAttempt, isRetryableStatus, type SendAttempt } from './attempts.js';
 import {
   ContractViolationError,
+  IdempotencyViolationError,
   InvalidApiKeyError,
   TransportError,
   describeZodIssues,
@@ -81,8 +82,26 @@ export type SendReadingOptions = Omit<BuildDeviceEventOptions, 'deviceId' | 'car
  * ráfaga lleva los suyos, distintos de los de las demás.
  */
 export type BurstOptions = Omit<SendReadingOptions, 'cardUid' | 'eventId'> & {
-  /** Retardo entre lecturas consecutivas, en milisegundos. */
+  /** Retardo entre lecturas consecutivas, en milisegundos. Se ignora si `concurrent` es `true`. */
   delayMs?: number | undefined;
+  /**
+   * Lanza todas las lecturas a la vez en lugar de una tras otra. Sirve para provocar carreras en el
+   * servidor (creación perezosa de sesión, unicidad de asistencia) que la ejecución secuencial no
+   * alcanza nunca.
+   */
+  concurrent?: boolean | undefined;
+};
+
+/** Opciones de un reenvío repetido del mismo evento (prueba de idempotencia). */
+export type RepeatOptions = SendReadingOptions & {
+  /** Retardo entre reenvíos consecutivos, en milisegundos. Se ignora si `concurrent` es `true`. */
+  delayMs?: number | undefined;
+  /**
+   * Lanza los reenvíos simultáneamente en vez de en serie. Es la única forma de provocar la carrera
+   * de dos peticiones con el mismo `eventId` llegando a la vez, que el servidor debe resolver con
+   * una sola fila en `rfid_events` y dos respuestas idénticas.
+   */
+  concurrent?: boolean | undefined;
 };
 
 export interface SendOutcome {
@@ -365,17 +384,56 @@ export class DeviceSimulator {
    */
   async repeat(
     times: number,
-    options: SendReadingOptions = {},
+    options: RepeatOptions = {},
     onOutcome?: (outcome: SendOutcome, index: number) => void,
   ): Promise<SendOutcome[]> {
-    const request = this.buildReading({ ...options, eventId: options.eventId ?? newEventId() });
-    const outcomes: SendOutcome[] = [];
-    for (let index = 0; index < times; index += 1) {
-      const outcome = await this.sendReading(request);
-      outcomes.push(outcome);
-      onOutcome?.(outcome, index);
+    const { delayMs = 0, concurrent = false, ...reading } = options;
+    const request = this.buildReading({ ...reading, eventId: reading.eventId ?? newEventId() });
+
+    let outcomes: SendOutcome[];
+    if (concurrent) {
+      // Todas a la vez: es lo que provoca la carrera en el servidor. El orden de resolución no es
+      // determinista, así que no se notifica hasta tenerlas todas.
+      outcomes = await Promise.all(Array.from({ length: times }, () => this.sendReading(request)));
+      outcomes.forEach((outcome, index) => onOutcome?.(outcome, index));
+    } else {
+      outcomes = [];
+      for (let index = 0; index < times; index += 1) {
+        if (index > 0 && delayMs > 0) {
+          await this.#sleep(delayMs);
+        }
+        const outcome = await this.sendReading(request);
+        outcomes.push(outcome);
+        onOutcome?.(outcome, index);
+      }
     }
+
+    this.#assertIdempotent(request.eventId, outcomes);
     return outcomes;
+  }
+
+  /**
+   * Comprueba RN7: todas las respuestas al mismo `eventId` deben ser idénticas a la primera.
+   *
+   * Sin esta comprobación el comando sería teatro: enviaría el mismo evento N veces y daría por
+   * bueno cualquier conjunto de respuestas, incluido el de un servidor que reprocesa el evento.
+   */
+  #assertIdempotent(eventId: string, outcomes: readonly SendOutcome[]): void {
+    const first = outcomes[0];
+    if (first === undefined) return;
+    const reference = JSON.stringify(first.response);
+    for (let index = 1; index < outcomes.length; index += 1) {
+      const current = outcomes[index];
+      if (current === undefined) continue;
+      if (JSON.stringify(current.response) !== reference) {
+        throw new IdempotencyViolationError({
+          eventId,
+          index,
+          first: first.response,
+          received: current.response,
+        });
+      }
+    }
   }
 
   /**
@@ -387,7 +445,17 @@ export class DeviceSimulator {
     options: BurstOptions = {},
     onOutcome?: (outcome: SendOutcome, index: number) => void,
   ): Promise<SendOutcome[]> {
-    const { delayMs = 0, ...reading } = options;
+    const { delayMs = 0, concurrent = false, ...reading } = options;
+
+    if (concurrent) {
+      // Cada lectura sigue siendo distinta (UID y eventId propios); lo que se simula aquí es una
+      // fila de estudiantes pasando el carnet a la vez, que es lo que pone a prueba la creación
+      // perezosa de la sesión bajo concurrencia.
+      const outcomes = await Promise.all(Array.from({ length: count }, () => this.send(reading)));
+      outcomes.forEach((outcome, index) => onOutcome?.(outcome, index));
+      return outcomes;
+    }
+
     const outcomes: SendOutcome[] = [];
     for (let index = 0; index < count; index += 1) {
       if (index > 0 && delayMs > 0) {
@@ -407,7 +475,9 @@ export class DeviceSimulator {
    * enrolamiento, o `unknown_card` si está en modo normal.
    */
   async enroll(options: SendReadingOptions = {}): Promise<SendOutcome> {
-    return this.send({ ...options, cardUid: options.cardUid ?? randomCardUid(4) });
+    // Delega sin fijar el UID: `send` ya genera uno aleatorio respetando `cardUidBytes`, que es lo
+    // que permite enrolar carnets MIFARE de 7 bytes y no solo los de 4.
+    return this.send(options);
   }
 
   /** Valida el cuerpo recibido contra el contrato v1 y lo devuelve tipado. */

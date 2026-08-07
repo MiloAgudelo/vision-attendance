@@ -119,7 +119,11 @@ async function collectOutcomes(
       return [outcome];
     }
     case 'repetir':
-      return simulator.repeat(options.count, reading, report);
+      return simulator.repeat(
+        options.count,
+        { ...reading, delayMs: options.delayMs, concurrent: options.concurrent },
+        report,
+      );
     case 'rafaga':
       return simulator.burst(
         options.count,
@@ -129,6 +133,7 @@ async function collectOutcomes(
           scannedAtOffsetMs: options.scannedAtOffsetMs,
           firmwareVersion: options.firmwareVersion,
           delayMs: options.delayMs,
+          concurrent: options.concurrent,
         },
         report,
       );

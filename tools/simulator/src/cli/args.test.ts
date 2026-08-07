@@ -231,3 +231,87 @@ describe('opciones de la lectura', () => {
     expect(options(['--', 'enviar', '--key', KEY, '--uid', 'A1B2C3D4']).command).toBe('enviar');
   });
 });
+
+describe('opciones que antes se aceptaban y se ignoraban en silencio', () => {
+  it('rechaza --count en "reintentar", que envía una sola lectura', () => {
+    expect(usageError(['reintentar', '--key', KEY, '--uid', 'A1B2C3D4', '--count', '3'])).toContain(
+      'envía una sola lectura',
+    );
+  });
+
+  it.each(['enviar', 'enrolar', 'reintentar'])('rechaza --delay en "%s"', (command) => {
+    expect(usageError([command, '--key', KEY, '--uid', 'A1B2C3D4', '--delay', '100'])).toContain(
+      '--delay solo aplica',
+    );
+  });
+
+  it('acepta --delay en "repetir", donde ahora sí se aplica', () => {
+    expect(options(['repetir', '--key', KEY, '--uid', 'A1B2C3D4', '--delay', '250']).delayMs).toBe(
+      250,
+    );
+  });
+});
+
+describe('--concurrentes', () => {
+  it('se acepta en "repetir"', () => {
+    expect(
+      options(['repetir', '--key', KEY, '--uid', 'A1B2C3D4', '--concurrentes']).concurrent,
+    ).toBe(true);
+  });
+
+  // `rafaga` no admite --uid: cada lectura genera el suyo.
+  it('se acepta en "rafaga"', () => {
+    expect(options(['rafaga', '--key', KEY, '--concurrentes']).concurrent).toBe(true);
+  });
+
+  it('es falso cuando no se pasa', () => {
+    expect(options(['repetir', '--key', KEY, '--uid', 'A1B2C3D4']).concurrent).toBe(false);
+  });
+
+  it('se rechaza donde no aplica', () => {
+    expect(usageError(['enviar', '--key', KEY, '--uid', 'A1B2C3D4', '--concurrentes'])).toContain(
+      '--concurrentes solo aplica',
+    );
+  });
+
+  it('se rechaza junto a --delay, porque se contradicen', () => {
+    expect(
+      usageError([
+        'repetir',
+        '--key',
+        KEY,
+        '--uid',
+        'A1B2C3D4',
+        '--concurrentes',
+        '--delay',
+        '100',
+      ]),
+    ).toContain('se contradicen');
+  });
+
+  it('no admite valor', () => {
+    expect(
+      usageError(['repetir', '--key', KEY, '--uid', 'A1B2C3D4', '--concurrentes=si']),
+    ).toContain('no admite valor');
+  });
+});
+
+describe('análisis de números', () => {
+  // `Number()` a secas acepta estas tres formas y el usuario acaba pidiendo algo distinto de lo
+  // que cree: 0x10 son 16, 1e3 son 1000 y la cadena vacía es 0.
+  it.each(['0x10', '1e3', '', ' ', '3.5', '-2', 'tres'])('rechaza --count %j', (value) => {
+    expect(
+      usageError(['repetir', '--key', KEY, '--uid', 'A1B2C3D4', `--count=${value}`]),
+    ).toContain('entero positivo');
+  });
+
+  it.each(['0x10', '1e3', ''])('rechaza --delay %j', (value) => {
+    expect(
+      usageError(['repetir', '--key', KEY, '--uid', 'A1B2C3D4', `--delay=${value}`]),
+    ).toContain('entero mayor o igual que cero');
+  });
+
+  it('acepta cero como retardo', () => {
+    expect(options(['repetir', '--key', KEY, '--uid', 'A1B2C3D4', '--delay', '0']).delayMs).toBe(0);
+  });
+});

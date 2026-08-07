@@ -12,6 +12,7 @@ import {
 } from './client.js';
 import {
   ContractViolationError,
+  IdempotencyViolationError,
   InvalidApiKeyError,
   InvalidEventError,
   TransportError,
@@ -359,10 +360,10 @@ describe('send — validación de la respuesta contra el contrato', () => {
 
 describe('repeat — idempotencia', () => {
   it('envía la misma lectura N veces con el mismo eventId y el mismo cuerpo', async () => {
-    const { fetch, calls } = scriptedFetch([
-      (request, call) =>
-        jsonResponse(successBody(request, call === 1 ? {} : { result: 'already_registered' })),
-    ]);
+    // El servidor correcto devuelve SIEMPRE la respuesta original almacenada (RN7), así que las
+    // tres respuestas son idénticas. Un doble que fuera variando el `result` describiría a un
+    // servidor que reprocesa el evento, que es justo lo que este comando debe delatar.
+    const { fetch, calls } = scriptedFetch([(request) => jsonResponse(successBody(request))]);
     const simulator = new DeviceSimulator({ apiKey: API_KEY, fetch });
 
     const outcomes = await simulator.repeat(3, { cardUid: UID });
@@ -373,7 +374,44 @@ describe('repeat — idempotencia', () => {
     expect(outcomes).toHaveLength(3);
     expect(
       outcomes.map((outcome) => (outcome.response.ok ? outcome.response.result : null)),
-    ).toEqual(['registered', 'already_registered', 'already_registered']);
+    ).toEqual(['registered', 'registered', 'registered']);
+  });
+
+  it('delata al servidor que no devuelve la respuesta original almacenada', async () => {
+    // Violación de RN7 más frecuente: el servidor reprocesa el evento en vez de releer
+    // `rfid_events.response`, y responde `already_registered` donde antes respondió `registered`.
+    const { fetch } = scriptedFetch([
+      (request, call) =>
+        jsonResponse(successBody(request, call === 1 ? {} : { result: 'already_registered' })),
+    ]);
+    const simulator = new DeviceSimulator({ apiKey: API_KEY, fetch });
+
+    await expect(simulator.repeat(3, { cardUid: UID })).rejects.toThrow(IdempotencyViolationError);
+  });
+
+  it('espera entre reenvíos cuando se pide retardo', async () => {
+    const { fetch } = scriptedFetch([(request) => jsonResponse(successBody(request))]);
+    const { sleeps, sleep } = recordingSleep();
+    const simulator = new DeviceSimulator({ apiKey: API_KEY, fetch, sleep });
+
+    await simulator.repeat(3, { cardUid: UID, delayMs: 250 });
+
+    // 2 esperas para 3 reenvíos: solo entre ellos.
+    expect(sleeps).toEqual([250, 250]);
+  });
+
+  it('con --concurrentes lanza los reenvíos a la vez y no espera', async () => {
+    // La carrera de dos peticiones con el mismo eventId es inalcanzable en serie, y es exactamente
+    // la que el servidor debe resolver con una sola fila en rfid_events (W2/W4).
+    const { fetch, calls } = scriptedFetch([(request) => jsonResponse(successBody(request))]);
+    const { sleeps, sleep } = recordingSleep();
+    const simulator = new DeviceSimulator({ apiKey: API_KEY, fetch, sleep });
+
+    const outcomes = await simulator.repeat(4, { cardUid: UID, concurrent: true });
+
+    expect(outcomes).toHaveLength(4);
+    expect(new Set(calls.map((call) => call.body.eventId)).size).toBe(1);
+    expect(sleeps).toEqual([]);
   });
 });
 
@@ -422,5 +460,18 @@ describe('enroll — modo enrolamiento', () => {
 
     expect(calls[0]?.body.cardUid).toMatch(/^[0-9A-F]{8}$/);
     expect(outcome.response.ok && outcome.response.result).toBe('enrollment_captured');
+  });
+
+  it('respeta la longitud de UID pedida', async () => {
+    // Enrolar carnets MIFARE de 7 bytes es un caso real: antes `enroll` fijaba el UID a 4 bytes
+    // antes de delegar, así que `--bytes 7` se ignoraba en silencio.
+    const { fetch, calls } = scriptedFetch([
+      (request) => jsonResponse(successBody(request, { result: 'enrollment_captured' })),
+    ]);
+    const simulator = new DeviceSimulator({ apiKey: API_KEY, fetch });
+
+    await simulator.enroll({ cardUidBytes: 7 });
+
+    expect(calls[0]?.body.cardUid).toMatch(/^[0-9A-F]{14}$/);
   });
 });

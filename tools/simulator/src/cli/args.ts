@@ -38,6 +38,8 @@ export interface CliOptions {
   readonly expect: readonly EventResult[] | undefined;
   readonly count: number;
   readonly delayMs: number;
+  /** Envía las lecturas simultáneamente para provocar carreras en el servidor. */
+  readonly concurrent: boolean;
 }
 
 export type ParsedArgs =
@@ -48,7 +50,7 @@ export type ParsedArgs =
 /** Tiempo límite por defecto del comando `reintentar`: corto a propósito, para forzar el backoff. */
 export const RETRY_DEMO_TIMEOUT_MS = 1_000;
 
-const BOOLEAN_FLAGS = new Set(['--json', '--help', '-h']);
+const BOOLEAN_FLAGS = new Set(['--json', '--help', '-h', '--concurrentes']);
 
 const KNOWN_FLAGS = new Set([
   '--url',
@@ -63,6 +65,7 @@ const KNOWN_FLAGS = new Set([
   '--expect',
   '--count',
   '--delay',
+  '--concurrentes',
   '--timeout',
   '--max-attempts',
   '--backoff',
@@ -81,6 +84,7 @@ interface RawArgs {
   readonly flags: ReadonlyMap<string, string>;
   readonly help: boolean;
   readonly json: boolean;
+  readonly concurrent: boolean;
 }
 
 function tokenize(argv: readonly string[]): RawArgs {
@@ -88,6 +92,7 @@ function tokenize(argv: readonly string[]): RawArgs {
   let command: string | null = null;
   let help = false;
   let json = false;
+  let concurrent = false;
 
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
@@ -122,6 +127,8 @@ function tokenize(argv: readonly string[]): RawArgs {
       }
       if (name === '--json') {
         json = true;
+      } else if (name === '--concurrentes') {
+        concurrent = true;
       } else {
         help = true;
       }
@@ -146,12 +153,34 @@ function tokenize(argv: readonly string[]): RawArgs {
     flags.set(name, value);
   }
 
-  return { command, flags, help, json };
+  return { command, flags, help, json, concurrent };
+}
+
+/**
+ * Solo dígitos decimales. `Number()` a secas acepta `0x10` como 16, `1e3` como 1000 y la cadena
+ * vacía como 0, que son tres formas de que el usuario crea haber pedido algo distinto de lo que pide.
+ */
+const DECIMAL_DIGITS = /^\d+$/;
+
+function requireDecimalInt(name: string, raw: string, expectation: string): number {
+  const trimmed = raw.trim();
+  if (!DECIMAL_DIGITS.test(trimmed)) {
+    throw new UsageError(
+      `La opción ${name} espera ${expectation}; se recibió ${JSON.stringify(raw)}.`,
+    );
+  }
+  const value = Number(trimmed);
+  if (!Number.isSafeInteger(value)) {
+    throw new UsageError(
+      `La opción ${name} espera ${expectation}; se recibió ${JSON.stringify(raw)}.`,
+    );
+  }
+  return value;
 }
 
 function requirePositiveInt(name: string, raw: string): number {
-  const value = Number(raw);
-  if (!Number.isInteger(value) || value <= 0) {
+  const value = requireDecimalInt(name, raw, 'un entero positivo');
+  if (value <= 0) {
     throw new UsageError(
       `La opción ${name} espera un entero positivo; se recibió ${JSON.stringify(raw)}.`,
     );
@@ -160,13 +189,7 @@ function requirePositiveInt(name: string, raw: string): number {
 }
 
 function requireNonNegativeInt(name: string, raw: string): number {
-  const value = Number(raw);
-  if (!Number.isInteger(value) || value < 0) {
-    throw new UsageError(
-      `La opción ${name} espera un entero mayor o igual que cero; se recibió ${JSON.stringify(raw)}.`,
-    );
-  }
-  return value;
+  return requireDecimalInt(name, raw, 'un entero mayor o igual que cero');
 }
 
 function parseExpected(raw: string): EventResult[] {
@@ -302,9 +325,28 @@ export function parseArgs(argv: readonly string[], env: ParseArgsEnvironment = {
     const timeoutFlag = flags.get('--timeout');
     const defaults = COMMAND_DEFAULTS[command];
 
-    if (countFlag !== undefined && (command === 'enviar' || command === 'enrolar')) {
+    // `reintentar` también envía una sola lectura (la reintenta, que es otra cosa): aceptar
+    // `--count` ahí lo ignoraba en silencio y encima rotulaba la salida como una serie de N.
+    if (
+      countFlag !== undefined &&
+      (command === 'enviar' || command === 'enrolar' || command === 'reintentar')
+    ) {
       throw new UsageError(
         `El comando "${command}" envía una sola lectura; usa "repetir" o "rafaga" para varias.`,
+      );
+    }
+
+    if (delayFlag !== undefined && command !== 'repetir' && command !== 'rafaga') {
+      throw new UsageError(`La opción --delay solo aplica a "repetir" y "rafaga".`);
+    }
+
+    if (raw.concurrent && command !== 'repetir' && command !== 'rafaga') {
+      throw new UsageError(`La opción --concurrentes solo aplica a "repetir" y "rafaga".`);
+    }
+
+    if (raw.concurrent && delayFlag !== undefined) {
+      throw new UsageError(
+        `--concurrentes y --delay se contradicen: o las lecturas salen a la vez, o espaciadas.`,
       );
     }
 
@@ -343,6 +385,7 @@ export function parseArgs(argv: readonly string[], env: ParseArgsEnvironment = {
       count: countFlag === undefined ? defaults.count : requirePositiveInt('--count', countFlag),
       delayMs:
         delayFlag === undefined ? defaults.delayMs : requireNonNegativeInt('--delay', delayFlag),
+      concurrent: raw.concurrent,
     };
 
     return { kind: 'options', options };
