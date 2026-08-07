@@ -1,0 +1,19 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+  - 'tools/*'
+
+# pnpm 10+ bloquea los scripts de postinstall por defecto y pnpm 11 sustituyó
+# `onlyBuiltDependencies` por `allowBuilds`. Los paquetes marcados aquí con `true`
+# sí ejecutan su build/postinstall: sin esto los binarios nativos (PostgreSQL
+# embebido, esbuild, Tailwind oxide) quedan sin hidratar.
+allowBuilds:
+  '@embedded-postgres/darwin-arm64': true
+  '@embedded-postgres/darwin-x64': true
+  '@embedded-postgres/linux-arm64': true
+  '@embedded-postgres/linux-x64': true
+  '@embedded-postgres/windows-x64': true
+  '@tailwindcss/oxide': true
+  esbuild: true
+  sharp: true
+  unrs-resolver: true
