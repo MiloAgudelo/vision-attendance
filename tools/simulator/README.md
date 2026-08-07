@@ -45,11 +45,17 @@ Ejemplos:
 # lectura normal, exigiendo que quede registrada
 pnpm --filter @va/simulator sim -- enviar --uid a1:b2:c3:d4 --expect registered
 
-# idempotencia: 3 envíos del mismo eventId → 1 sola asistencia
+# idempotencia: 3 envíos del mismo eventId → 1 sola asistencia y 3 respuestas IDÉNTICAS
 pnpm --filter @va/simulator sim -- repetir --uid A1B2C3D4 --count 3
+
+# la carrera: 5 peticiones simultáneas con el mismo eventId → 1 sola fila en rfid_events
+pnpm --filter @va/simulator sim -- repetir --uid A1B2C3D4 --count 5 --concurrentes
 
 # 10 lecturas distintas, 200 ms entre ellas, UID de 7 bytes
 pnpm --filter @va/simulator sim -- rafaga --count 10 --delay 200 --bytes 7
+
+# 10 lecturas a la vez: pone a prueba la creación perezosa de la sesión bajo concurrencia
+pnpm --filter @va/simulator sim -- rafaga --count 10 --concurrentes
 
 # reloj del dispositivo 3 horas atrasado: la hora oficial la pone el servidor (RN8)
 pnpm --filter @va/simulator sim -- enviar --uid A1B2C3D4 --scanned-at-offset -3h
@@ -127,6 +133,16 @@ El cliente aplica la política del contrato: tiempo límite de 5 s por intento, 
 de 1 s, 2 s, 4 s, 8 s y un máximo de 5 intentos, **siempre con el mismo `eventId`**. Se reintenta
 ante fallo de red, timeout y los códigos que el contrato marca como reintentables (429 y 5xx); los
 errores definitivos (400, 401, 403) se devuelven al primer intento.
+
+`repetir` **compara las respuestas entre sí**: el contrato exige que un `eventId` ya procesado
+devuelva la respuesta original almacenada, byte a byte, así que cualquier diferencia entre reenvíos
+lanza `IdempotencyViolationError`. Sin esa comparación el comando solo enviaría el evento N veces y
+daría por bueno un servidor que lo reprocesa —el defecto exacto que existe para detectar—.
+
+`--concurrentes` lanza los envíos simultáneamente en vez de en serie. Es la única forma de provocar
+las carreras que el servidor debe resolver: dos peticiones con el mismo `eventId` llegando a la vez
+(una sola fila en `rfid_events`) y varias lecturas simultáneas sobre una sesión que aún no existe
+(una sola sesión creada). En serie esas rutas de código son inalcanzables.
 
 ## Prueba de humo real (cuando W2 esté mergeada)
 
