@@ -31,7 +31,7 @@ import {
   isSupportedContractVersion,
   type DeviceEventStudent,
 } from '@va/shared';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 
 import {
   findDeviceByApiKey,
@@ -115,16 +115,40 @@ export async function ingestDeviceEvent(
 
   /* 5–7. Resolución, registro incondicional y respuesta. */
   return database.transaction(async (tx) => {
+    // La restricción única evita filas duplicadas, pero llega demasiado tarde para impedir que dos
+    // solicitudes concurrentes ejecuten ambas el motor. Este lock transaccional serializa la clave
+    // de RN7; una colisión de hash solo serializa eventos no relacionados, sin afectar corrección.
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtext(${device.id}), hashtext(${event.eventId}))`,
+    );
+
+    // La otra solicitud pudo terminar mientras esperábamos el lock. En ese caso no se resuelve el
+    // carnet ni se llama al motor: se reproduce la respuesta original sin reprocesar (RN7).
+    const wonWhileWaiting = await findStoredResponse(tx, device.id, event.eventId);
+    if (wonWhileWaiting !== null) return replayStoredResponse(wonWhileWaiting);
+
     const resolution = await resolveCard(tx, event.cardUid);
-    const outcome = await decideOutcome({
-      tx,
-      device,
-      cardUid: event.cardUid,
-      resolution,
-      receivedAt,
-      attendanceEngine,
-      eventRowId: randomUUID(),
-    });
+    const eventRowId = randomUUID();
+    let outcome: EventOutcome;
+    try {
+      // Un error SQL aborta la transacción actual de PostgreSQL aunque JavaScript lo capture. El
+      // SAVEPOINT permite deshacer solo el motor y mantener utilizable la transacción que debe
+      // registrar el evento con `result = 'error'` (RN1).
+      outcome = await tx.transaction((engineTx) =>
+        decideOutcome({
+          tx: engineTx,
+          device,
+          cardUid: event.cardUid,
+          resolution,
+          receivedAt,
+          attendanceEngine,
+          eventRowId,
+        }),
+      );
+    } catch (error) {
+      console.error('[events] fallo al resolver el evento; se registra como `error`:', error);
+      outcome = errorOutcome(eventRowId, resolution?.cardId ?? null);
+    }
 
     const response = buildSuccessResponse({
       eventId: event.eventId,
@@ -156,11 +180,41 @@ export async function ingestDeviceEvent(
 
     if (inserted.length === 0) {
       const winner = await findStoredResponse(tx, device.id, event.eventId);
-      return winner !== null ? replayStoredResponse(winner) : { status: 200, body: response };
+      if (winner === null) {
+        throw new Error('La carrera de idempotencia no dejó una respuesta persistida.');
+      }
+      return replayStoredResponse(winner);
     }
 
-    // Escrituras del motor que necesitaban la fila del evento ya insertada (W4).
-    await outcome.persist?.();
+    // Escrituras del motor que necesitaban la fila del evento ya insertada (W4). Su SAVEPOINT
+    // impide que una sentencia SQL fallida aborte la transacción que conserva `rfid_events`.
+    if (outcome.persist) {
+      try {
+        await tx.transaction((persistTx) => outcome.persist!(persistTx));
+      } catch (error) {
+        console.error(
+          '[events] fallo al persistir el resultado; el evento queda como `error`:',
+          error,
+        );
+
+        const failureResponse = buildSuccessResponse({
+          eventId: event.eventId,
+          result: 'error',
+          receivedAt,
+          student: null,
+          session: null,
+        });
+
+        // Esta finalización ocurre antes del COMMIT: la fila nunca es visible con el resultado
+        // optimista. No es una edición de negocio de la bitácora inmutable.
+        await tx
+          .update(rfidEvents)
+          .set({ result: 'error', response: failureResponse })
+          .where(eq(rfidEvents.id, outcome.eventRowId));
+
+        return { status: 200, body: failureResponse };
+      }
+    }
 
     return { status: 200, body: response };
   });
@@ -179,7 +233,9 @@ export async function ingestDeviceEvent(
 function readClaimedDeviceId(body: unknown): string | null {
   if (typeof body !== 'object' || body === null) return null;
   const value = (body as Record<string, unknown>)['deviceId'];
-  return typeof value === 'string' ? value.trim() : null;
+  if (typeof value !== 'string') return null;
+  const claimedDeviceId = value.trim();
+  return claimedDeviceId.length > 0 ? claimedDeviceId : null;
 }
 
 /** Respuesta almacenada de un `(device_id, event_id)` ya procesado, o `null` si es la primera vez. */
@@ -248,7 +304,7 @@ interface EventOutcome {
   cardId: string | null;
   student: DeviceEventStudent | null;
   session: { id: string; scheduledStart: string } | null;
-  persist?: (() => Promise<void>) | undefined;
+  persist?: ((tx: Queryable) => Promise<void>) | undefined;
 }
 
 /**
@@ -263,64 +319,63 @@ interface EventOutcome {
  * - Modo `normal` y carnet sin estudiante → `unknown_card`.
  * - Carnet con estudiante (en cualquier modo) → decide el motor de asistencia (W4).
  *
- * Si el motor falla, el evento **se registra igualmente** con `result = 'error'` (RN1 y catálogo
- * del contrato: «error interno ya persistido»), no con un 500 que perdería la hora de entrada.
+ * Los fallos se aíslan y traducen en el caller, porque solo el SAVEPOINT que rodea esta función
+ * puede recuperar una transacción de PostgreSQL abortada por un error SQL.
  */
 async function decideOutcome(input: DecideOutcomeInput): Promise<EventOutcome> {
   const { tx, device, resolution, receivedAt, attendanceEngine, eventRowId } = input;
 
-  try {
-    if (resolution?.student) {
-      const decision = await attendanceEngine({
-        tx,
-        eventRowId,
-        receivedAt,
-        device: { id: device.id, name: device.name, mode: device.mode, room: device.room },
-        card: { id: resolution.cardId, uid: resolution.cardUid },
-        student: resolution.student,
-      });
-
-      return {
-        eventRowId,
-        result: decision.result,
-        cardId: resolution.cardId,
-        student: {
-          code: resolution.student.studentCode,
-          name: resolution.student.fullName,
-        },
-        session: decision.session,
-        persist: decision.persist,
-      };
-    }
-
-    if (device.mode === 'enrollment') {
-      const capturedCardId = await captureCardForEnrollment(tx, input.cardUid);
-      return {
-        eventRowId,
-        result: 'enrollment_captured',
-        cardId: capturedCardId,
-        student: null,
-        session: null,
-      };
-    }
+  if (resolution?.student) {
+    const decision = await attendanceEngine({
+      tx,
+      eventRowId,
+      receivedAt,
+      device: { id: device.id, name: device.name, mode: device.mode, room: device.room },
+      card: { id: resolution.cardId, uid: resolution.cardUid },
+      student: resolution.student,
+    });
 
     return {
       eventRowId,
-      result: 'unknown_card',
-      cardId: resolution?.cardId ?? null,
-      student: null,
-      session: null,
+      result: decision.result,
+      cardId: resolution.cardId,
+      student: {
+        code: resolution.student.studentCode,
+        name: resolution.student.fullName,
+      },
+      session: decision.session,
+      persist: decision.persist,
     };
-  } catch (error) {
-    console.error('[events] fallo al resolver el evento; se registra como `error`:', error);
+  }
+
+  if (device.mode === 'enrollment') {
+    const capturedCardId = await captureCardForEnrollment(tx, input.cardUid);
     return {
       eventRowId,
-      result: 'error',
-      cardId: resolution?.cardId ?? null,
+      result: 'enrollment_captured',
+      cardId: capturedCardId,
       student: null,
       session: null,
     };
   }
+
+  return {
+    eventRowId,
+    result: 'unknown_card',
+    cardId: resolution?.cardId ?? null,
+    student: null,
+    session: null,
+  };
+}
+
+function errorOutcome(eventRowId: string, cardId: string | null): EventOutcome {
+  return {
+    eventRowId,
+    result: 'error',
+    cardId,
+    student: null,
+    session: null,
+  };
 }
 
 /**

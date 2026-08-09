@@ -9,8 +9,8 @@
 import { cards, devices, getDatabase, rfidEvents, students, type Database } from '@va/db';
 import { and, desc, eq, isNull, ne } from 'drizzle-orm';
 
-import { BusinessRuleError, isUniqueViolation } from '../devices/errors';
-import { assignCardInputSchema } from './schemas';
+import { assignCardInputSchema } from './enrollment-schemas';
+import { BusinessRuleError, isUniqueViolation } from './errors';
 
 /** Índice parcial `UNIQUE (uid) WHERE status = 'active'` de `cards` (`docs/data-model.md`). */
 const ACTIVE_UID_UNIQUE_INDEX = 'cards_uid_active_unique';

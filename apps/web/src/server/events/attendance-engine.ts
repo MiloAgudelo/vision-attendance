@@ -15,12 +15,14 @@
  * {@link AttendanceEngine} desde `src/server/attendance/` y pasarla en
  * {@link import('./ingest.js').ingestDeviceEvent}) respetando tres invariantes del pipeline:
  *
- * 1. Se ejecuta **dentro de la transacción** del evento: usa `context.tx`, no `getDatabase()`.
+ * 1. Se ejecuta **dentro de un SAVEPOINT** de la transacción del evento: usa `context.tx`, no
+ *    `getDatabase()`. Si una sentencia SQL falla, W2 revierte ese SAVEPOINT y todavía puede
+ *    registrar el evento con `result = 'error'` (RN1).
  * 2. La fila de `rfid_events` todavía **no existe** cuando corre. Su `id` ya está reservado en
  *    `context.eventRowId`, pero cualquier escritura que la referencie por clave foránea —la
- *    asistencia lleva `attendances.event_id`— debe hacerse en la devolución {@link AttendanceDecision.persist},
- *    que W2 invoca justo después de insertar el evento y solo si esta petición ganó la carrera de
- *    idempotencia.
+ *    asistencia lleva `attendances.event_id`— debe hacerse en la devolución
+ *    {@link AttendanceDecision.persist}, que W2 invoca justo después de insertar el evento, en un
+ *    SAVEPOINT propio y solo si esta petición ganó la carrera de idempotencia.
  * 3. `context.receivedAt` es la hora oficial de entrada (RN8). El `scannedAt` del lector es
  *    informativo y por eso no se pasa aquí.
  */
@@ -80,10 +82,15 @@ export interface AttendanceDecision {
   session: DeviceEventSession | null;
   /**
    * Escrituras que dependen de que la fila de `rfid_events` ya exista (típicamente la asistencia,
-   * que la referencia por clave foránea). W2 la ejecuta dentro de la MISMA transacción, justo
-   * después de insertar el evento, y **solo** si esta petición ganó la carrera de idempotencia.
+   * que la referencia por clave foránea). W2 la ejecuta en un SAVEPOINT de la misma transacción,
+   * justo después de insertar el evento y **solo** si esta petición ganó la carrera de
+   * idempotencia.
+   *
+   * Debe ser idempotente: una transacción puede reintentarse por errores serializables o por la
+   * infraestructura de base de datos. Todas sus consultas deben usar exclusivamente el `tx`
+   * recibido; conservar `context.tx` en el closure rompería el aislamiento del SAVEPOINT.
    */
-  persist?: (() => Promise<void>) | undefined;
+  persist?: ((tx: Database) => Promise<void>) | undefined;
 }
 
 export type AttendanceEngine = (context: AttendanceContext) => Promise<AttendanceDecision>;

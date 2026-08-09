@@ -4,7 +4,7 @@ import {
   listAssignableStudents,
   listPendingCards,
   listRecentCaptures,
-} from '@/server/enrollment/enrollment';
+} from '@/server/devices/enrollment';
 
 import { formatBogota } from '../format';
 import { AssignCardForm } from './assign-card-form';

@@ -8,7 +8,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { cards, rfidEvents } from '@va/db';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { ingestDeviceEvent } from './ingest';
@@ -128,6 +128,26 @@ describe('contrato', () => {
 
     expect(result.status).toBe(400);
     expect(result.body).toMatchObject({ error: 'invalid_payload' });
+  });
+
+  it('responde 400 invalid_payload cuando `deviceId` está presente pero vacío', async () => {
+    const device = await workspace.createDevice();
+    const body = deviceEventBody({
+      deviceId: '',
+      cardUid: workspace.nextCardUid(),
+    });
+
+    const result = await ingestDeviceEvent({
+      authorization: bearer(device.apiKey),
+      body,
+      database: workspace.database,
+    });
+
+    expect(result).toEqual({
+      status: 400,
+      body: { ok: false, error: 'invalid_payload', message: 'Cuerpo de la solicitud inválido' },
+    });
+    expect(await eventsOfDevice(device.id)).toHaveLength(0);
   });
 
   it('responde 400 unsupported_contract (y NO invalid_payload) a `contractVersion: 2`', async () => {
@@ -345,16 +365,24 @@ describe('concurrencia', () => {
 
     const body = deviceEventBody({ deviceId: device.name, cardUid: uid });
 
+    let engineCalls = 0;
+    const attendanceEngine = () => {
+      engineCalls += 1;
+      return Promise.resolve({ result: 'no_session' as const, session: null });
+    };
+
     const [first, second] = await Promise.all([
       ingestDeviceEvent({
         authorization: bearer(device.apiKey),
         body,
         database: workspace.database,
+        attendanceEngine,
       }),
       ingestDeviceEvent({
         authorization: bearer(device.apiKey),
         body,
         database: workspace.database,
+        attendanceEngine,
       }),
     ]);
 
@@ -362,6 +390,37 @@ describe('concurrencia', () => {
     expect(second.status).toBe(200);
     expect(JSON.stringify(second.body)).toBe(JSON.stringify(first.body));
     expect(await countEvents(device.id, String(body['eventId']))).toBe(1);
+    expect(engineCalls).toBe(1);
+  });
+
+  it('un payload competidor con el mismo `eventId` no deja efectos del perdedor', async () => {
+    const device = await workspace.createDevice({ mode: 'enrollment' });
+    const eventId = randomUUID();
+    const firstUid = workspace.nextCardUid();
+    const secondUid = workspace.nextCardUid();
+
+    const [first, second] = await Promise.all([
+      ingestDeviceEvent({
+        authorization: bearer(device.apiKey),
+        body: deviceEventBody({ deviceId: device.name, cardUid: firstUid, eventId }),
+        database: workspace.database,
+      }),
+      ingestDeviceEvent({
+        authorization: bearer(device.apiKey),
+        body: deviceEventBody({ deviceId: device.name, cardUid: secondUid, eventId }),
+        database: workspace.database,
+      }),
+    ]);
+
+    expect(JSON.stringify(second.body)).toBe(JSON.stringify(first.body));
+    expect(await countEvents(device.id, eventId)).toBe(1);
+
+    const captured = await workspace.database
+      .select({ uid: cards.uid })
+      .from(cards)
+      .where(sql`${cards.uid} in (${firstUid}, ${secondUid})`);
+    expect(captured).toHaveLength(1);
+    expect([firstUid, secondUid]).toContain(captured[0]?.uid);
   });
 });
 
@@ -572,8 +631,8 @@ describe('motor de asistencia (punto de conexión de W4)', () => {
         return Promise.resolve({
           result: 'registered',
           session: null,
-          persist: async () => {
-            const rows = await context.tx
+          persist: async (persistTx) => {
+            const rows = await persistTx
               .select({ id: rfidEvents.id })
               .from(rfidEvents)
               .where(eq(rfidEvents.id, context.eventRowId));
@@ -611,6 +670,79 @@ describe('motor de asistencia (punto de conexión de W4)', () => {
     const rows = await eventsOfDevice(device.id);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.result).toBe('error');
+  });
+
+  it('un error SQL real del motor revierte su SAVEPOINT pero conserva `rfid_events` (RN1)', async () => {
+    const device = await workspace.createDevice();
+    const student = await workspace.createStudent();
+    const uid = workspace.nextCardUid();
+    await workspace.createCard(uid, { studentId: student.id });
+
+    const result = await ingestDeviceEvent({
+      authorization: bearer(device.apiKey),
+      body: deviceEventBody({ deviceId: device.name, cardUid: uid }),
+      database: workspace.database,
+      attendanceEngine: async (context) => {
+        await context.tx.execute(sql`select 1 / 0`);
+        return { result: 'registered', session: null };
+      },
+    });
+
+    expect(result).toMatchObject({
+      status: 200,
+      body: { result: 'error', message: 'Error interno; la lectura quedó registrada' },
+    });
+
+    const rows = await eventsOfDevice(device.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ result: 'error', response: result.body });
+  });
+
+  it('aísla un `persist` fallido y conserva el evento con la respuesta final `error`', async () => {
+    const device = await workspace.createDevice();
+    const student = await workspace.createStudent();
+    const uid = workspace.nextCardUid();
+    const rolledBackUid = workspace.nextCardUid();
+    await workspace.createCard(uid, { studentId: student.id });
+    const body = deviceEventBody({ deviceId: device.name, cardUid: uid });
+
+    const result = await ingestDeviceEvent({
+      authorization: bearer(device.apiKey),
+      body,
+      database: workspace.database,
+      attendanceEngine: () =>
+        Promise.resolve({
+          result: 'registered',
+          session: null,
+          persist: async (persistTx) => {
+            await persistTx.insert(cards).values({ uid: rolledBackUid, status: 'active' });
+            await persistTx.execute(sql`select 1 / 0`);
+          },
+        }),
+    });
+
+    expect(result).toMatchObject({
+      status: 200,
+      body: { result: 'error', message: 'Error interno; la lectura quedó registrada' },
+    });
+
+    const rows = await eventsOfDevice(device.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ result: 'error', response: result.body });
+    expect(
+      await workspace.database.select().from(cards).where(eq(cards.uid, rolledBackUid)),
+    ).toHaveLength(0);
+
+    const replay = await ingestDeviceEvent({
+      authorization: bearer(device.apiKey),
+      body,
+      database: workspace.database,
+      attendanceEngine: () => {
+        throw new Error('Un replay no debe volver a ejecutar el motor.');
+      },
+    });
+    expect(JSON.stringify(replay.body)).toBe(JSON.stringify(result.body));
+    expect(await countEvents(device.id, String(body['eventId']))).toBe(1);
   });
 });
 

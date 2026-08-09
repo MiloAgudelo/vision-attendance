@@ -4,7 +4,7 @@
 
 import { useActionState } from 'react';
 
-import type { AssignableStudent } from '@/server/enrollment/enrollment';
+import type { AssignableStudent } from '@/server/devices/enrollment';
 
 import { IDLE } from '../form-state';
 import { assignCardAction } from './actions';

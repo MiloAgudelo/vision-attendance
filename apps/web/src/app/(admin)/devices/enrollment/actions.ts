@@ -9,8 +9,8 @@
 
 import { revalidatePath } from 'next/cache';
 
+import { assignCardToStudent } from '@/server/devices/enrollment';
 import { BusinessRuleError } from '@/server/devices/errors';
-import { assignCardToStudent } from '@/server/enrollment/enrollment';
 
 import type { ActionState } from '../form-state';
 
