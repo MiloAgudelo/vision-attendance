@@ -39,7 +39,8 @@ import {
   type AuthenticatedDevice,
 } from '../devices/devices';
 import { extractBearerApiKey } from '../devices/credentials';
-import { noSessionAttendanceEngine, type AttendanceEngine } from './attendance-engine';
+import { attendanceEngine as defaultAttendanceEngine } from '../attendance/engine';
+import type { AttendanceEngine } from './attendance-engine';
 import {
   buildSuccessResponse,
   deviceErrorResult,
@@ -57,7 +58,7 @@ export interface IngestDeviceEventOptions {
    */
   body: unknown;
   database?: Database;
-  /** Motor de asistencia (lane W4). Por defecto, el provisional que devuelve `no_session`. */
+  /** Motor de asistencia. Inyectable para aislar fallos y carreras en pruebas del pipeline. */
   attendanceEngine?: AttendanceEngine;
   /** Reloj del servidor. Inyectable para poder fijar `received_at` en las pruebas. */
   now?: () => Date;
@@ -68,7 +69,7 @@ export async function ingestDeviceEvent(
   options: IngestDeviceEventOptions,
 ): Promise<DeviceEventHttpResult> {
   const database = options.database ?? getDatabase();
-  const attendanceEngine = options.attendanceEngine ?? noSessionAttendanceEngine;
+  const attendanceEngine = options.attendanceEngine ?? defaultAttendanceEngine;
   const now = options.now ?? (() => new Date());
 
   /* 1. Credencial. */
