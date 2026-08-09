@@ -137,6 +137,19 @@ async function scan(input: {
   });
 }
 
+async function scanWithDefaultEngine(input: {
+  device: Awaited<ReturnType<TestWorkspace['createDevice']>>;
+  uid: string;
+  receivedAt: string;
+}) {
+  return ingestDeviceEvent({
+    authorization: bearer(input.device.apiKey),
+    body: deviceEventBody({ deviceId: input.device.name, cardUid: input.uid }),
+    database: workspace.database,
+    now: () => new Date(input.receivedAt),
+  });
+}
+
 async function sessionsOf(groupId: string) {
   return workspace.database.select().from(classSessions).where(eq(classSessions.groupId, groupId));
 }
@@ -196,6 +209,32 @@ describe('ventana y sesiones perezosas (RN2, RN3 y RN10)', () => {
 });
 
 describe('registro e idempotencia (RN6, RN7 y RN8)', () => {
+  it('usa el motor W4 por defecto en el pipeline real de ingesta', async () => {
+    const academic = await createAcademicFixture({
+      weekday: 3,
+      startTime: '08:00:00',
+      endTime: '10:00:00',
+    });
+    const device = await workspace.createDevice({ room: 'A-301' });
+    const student = await createEnrolledStudent(academic.groupId);
+
+    const result = await scanWithDefaultEngine({
+      device,
+      uid: student.uid,
+      receivedAt: '2026-08-12T13:10:00.000Z',
+    });
+
+    expect(result.body).toMatchObject({ result: 'registered' });
+    const [session] = await sessionsOf(academic.groupId);
+    expect(session).toBeDefined();
+    expect(
+      await workspace.database
+        .select()
+        .from(attendances)
+        .where(eq(attendances.sessionId, session!.id)),
+    ).toHaveLength(1);
+  });
+
   it('responde registered y luego already_registered para dos lecturas del mismo estudiante', async () => {
     const academic = await createAcademicFixture({ weekday: 5 });
     const device = await workspace.createDevice({ room: 'A-301' });
