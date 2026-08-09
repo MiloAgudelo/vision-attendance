@@ -4,6 +4,7 @@ import {
   DEFAULT_SESSION_WINDOW_MINUTES,
   MAX_SESSION_WINDOW_MINUTES,
   groupInputSchema,
+  groupUpdateInputSchema,
 } from './groups';
 
 const SUBJECT_ID = '11111111-1111-4111-8111-111111111111';
@@ -33,6 +34,32 @@ describe('groupInputSchema — casos válidos', () => {
 
     expect(parsed.sessionWindowMinutes).toBe(DEFAULT_SESSION_WINDOW_MINUTES);
     expect(DEFAULT_SESSION_WINDOW_MINUTES).toBe(60);
+  });
+
+  it('aplica el valor por defecto al alta cuando llega vacío o null', () => {
+    for (const sessionWindowMinutes of ['', '   ', null]) {
+      expect(
+        groupInputSchema.parse({
+          subjectId: SUBJECT_ID,
+          name: 'G1',
+          term: '2026-2',
+          sessionWindowMinutes,
+        }).sessionWindowMinutes,
+      ).toBe(DEFAULT_SESSION_WINDOW_MINUTES);
+    }
+  });
+
+  it('omite la ventana vacía al editar para conservar el valor actual', () => {
+    for (const sessionWindowMinutes of ['', '   ', null, undefined]) {
+      expect(
+        groupUpdateInputSchema.parse({
+          subjectId: SUBJECT_ID,
+          name: 'G1',
+          term: '2026-2',
+          sessionWindowMinutes,
+        }),
+      ).not.toHaveProperty('sessionWindowMinutes');
+    }
   });
 
   it('convierte a número la ventana que llega como texto desde el formulario', () => {

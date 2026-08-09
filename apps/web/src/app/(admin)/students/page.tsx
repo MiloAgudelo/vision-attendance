@@ -1,8 +1,7 @@
 /**
  * Estudiantes: listado, alta y baja.
  *
- * Minimización de datos (`docs/alcance-v2.md` §16): nombre, código y estado. El UID del carnet se
- * muestra solo como consulta; asociarlo es competencia de la lane W2.
+ * Minimización de datos (`docs/alcance-v2.md` §16): nombre, código y estado.
  */
 
 import Link from 'next/link';
@@ -98,7 +97,6 @@ export default async function StudentsPage({
               <tr>
                 <Th>Código</Th>
                 <Th>Nombre</Th>
-                <Th>Carnet</Th>
                 <Th>Estado</Th>
                 <Th>Acciones</Th>
               </tr>
@@ -110,11 +108,6 @@ export default async function StudentsPage({
                   <span className="font-mono text-xs">{student.studentCode}</span>
                 </Td>
                 <Td>{student.fullName}</Td>
-                <Td>
-                  <span className="font-mono text-xs text-slate-500 dark:text-slate-400">
-                    {student.cardUid ?? 'Sin carnet'}
-                  </span>
-                </Td>
                 <Td>
                   <StatusBadge status={student.status} />
                 </Td>

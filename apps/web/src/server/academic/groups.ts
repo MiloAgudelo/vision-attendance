@@ -28,17 +28,23 @@ export const DEFAULT_SESSION_WINDOW_MINUTES = 60;
 /** Tope defensivo: media jornada. Una ventana mayor haría que cualquier escaneo cayera en clase. */
 export const MAX_SESSION_WINDOW_MINUTES = 720;
 
-const sessionWindowSchema = z.coerce
-  .number({ error: 'La ventana de sesión debe ser un número de minutos.' })
-  .int('La ventana de sesión debe ser un número entero de minutos.')
-  .min(0, 'La ventana de sesión no puede ser negativa.')
-  .max(
-    MAX_SESSION_WINDOW_MINUTES,
-    `La ventana de sesión no puede superar los ${MAX_SESSION_WINDOW_MINUTES} minutos.`,
-  )
-  .default(DEFAULT_SESSION_WINDOW_MINUTES);
+const optionalSessionWindowSchema = z.preprocess(
+  (value) =>
+    value === null || value === undefined || (typeof value === 'string' && value.trim() === '')
+      ? undefined
+      : value,
+  z.coerce
+    .number({ error: 'La ventana de sesión debe ser un número de minutos.' })
+    .int('La ventana de sesión debe ser un número entero de minutos.')
+    .min(0, 'La ventana de sesión no puede ser negativa.')
+    .max(
+      MAX_SESSION_WINDOW_MINUTES,
+      `La ventana de sesión no puede superar los ${MAX_SESSION_WINDOW_MINUTES} minutos.`,
+    )
+    .optional(),
+);
 
-export const groupInputSchema = z.object({
+const groupBaseInputSchema = z.object({
   subjectId: identifier('Selecciona una materia válida.'),
   name: requiredText({
     missing: 'El nombre del grupo es obligatorio.',
@@ -53,7 +59,19 @@ export const groupInputSchema = z.object({
   teacherId: identifier('El profesor seleccionado no es válido.')
     .nullish()
     .transform((value) => value ?? null),
-  sessionWindowMinutes: sessionWindowSchema,
+});
+
+export const groupInputSchema = groupBaseInputSchema.extend({
+  sessionWindowMinutes: optionalSessionWindowSchema.transform(
+    (value) => value ?? DEFAULT_SESSION_WINDOW_MINUTES,
+  ),
+});
+
+export const groupUpdateInputSchema = groupBaseInputSchema.extend({
+  sessionWindowMinutes: optionalSessionWindowSchema,
+}).transform((values) => {
+  const { sessionWindowMinutes, ...unchanged } = values;
+  return sessionWindowMinutes === undefined ? unchanged : values;
 });
 
 export type GroupInput = z.input<typeof groupInputSchema>;
@@ -182,7 +200,7 @@ export async function updateGroup(
   database?: AcademicDatabase,
 ): Promise<GroupRow> {
   const groupId = parseInput(groupIdSchema, id);
-  const values = parseInput(groupInputSchema, input);
+  const values = parseInput(groupUpdateInputSchema, input);
 
   const [row] = await withTranslatedErrors(() =>
     resolveDatabase(database)

@@ -20,7 +20,7 @@ export default async function EditStudentPage({ params }: { params: Promise<{ id
   const { id } = await params;
 
   const student = await getStudent(id).catch((error: unknown) => {
-    if (isDomainError(error) && error.code === 'not_found') notFound();
+    if (isDomainError(error) && ['not_found', 'validation'].includes(error.code)) notFound();
     throw error;
   });
 
@@ -87,13 +87,6 @@ export default async function EditStudentPage({ params }: { params: Promise<{ id
             />
           )}
         </div>
-      </Panel>
-
-      <Panel
-        description="El carnet se asocia desde el enrolamiento por escaneo, que administra otra sección del sistema."
-        title="Carnet"
-      >
-        <p className="font-mono text-sm">{student.cardUid ?? 'Sin carnet asociado'}</p>
       </Panel>
     </>
   );

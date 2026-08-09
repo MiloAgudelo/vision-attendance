@@ -82,6 +82,9 @@ describe('scheduleInputSchema — casos inválidos con mensaje en español', () 
 
     expect(result.success).toBe(false);
     expect(result.error?.issues[0]?.message).toBe('La hora de inicio debe tener el formato HH:MM.');
+    expect(result.error?.issues.map((issue) => issue.message)).toEqual([
+      'La hora de inicio debe tener el formato HH:MM.',
+    ]);
   });
 
   it('rechaza la hora de inicio vacía con un único mensaje', () => {

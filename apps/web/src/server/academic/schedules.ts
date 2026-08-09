@@ -12,11 +12,11 @@
  */
 
 import { groups, schedules, subjects } from '@va/db';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, gt, lt, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
 import { resolveDatabase, type AcademicDatabase } from './database';
-import { notFoundError, withTranslatedErrors } from './errors';
+import { conflictError, notFoundError, withTranslatedErrors } from './errors';
 import { identifier, optionalText, parseInput } from './validation';
 
 /* -------------------------------------------------------------------------- */
@@ -87,9 +87,18 @@ export const scheduleInputSchema = z
   })
   // Mismo criterio que el CHECK `schedules_time_order`, comprobado antes de tocar la base para
   // poder señalar el campo culpable en el formulario.
-  .refine((value) => value.endTime > value.startTime, {
-    message: 'La hora de fin debe ser posterior a la hora de inicio.',
-    path: ['endTime'],
+  .superRefine((value, context) => {
+    if (
+      TIME_OF_DAY.test(value.startTime) &&
+      TIME_OF_DAY.test(value.endTime) &&
+      value.endTime <= value.startTime
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: 'La hora de fin debe ser posterior a la hora de inicio.',
+        path: ['endTime'],
+      });
+    }
   });
 
 export type ScheduleInput = z.input<typeof scheduleInputSchema>;
@@ -171,14 +180,54 @@ export async function listWeeklySchedule(
 /* Escritura                                                                   */
 /* -------------------------------------------------------------------------- */
 
+const OVERLAPPING_SCHEDULE_MESSAGE =
+  'La franja se solapa con otro horario del grupo en el mismo día.';
+
+type ScheduleTransaction = Pick<AcademicDatabase, 'execute' | 'select'>;
+
+async function ensureScheduleDoesNotOverlap(
+  values: z.output<typeof scheduleInputSchema>,
+  database: ScheduleTransaction,
+  excludedScheduleId?: string,
+): Promise<void> {
+  const filters = [
+    eq(schedules.groupId, values.groupId),
+    eq(schedules.weekday, values.weekday),
+    lt(schedules.startTime, values.endTime),
+    gt(schedules.endTime, values.startTime),
+    excludedScheduleId ? ne(schedules.id, excludedScheduleId) : undefined,
+  ].filter((filter) => filter !== undefined);
+
+  const [overlap] = await database
+    .select({ id: schedules.id })
+    .from(schedules)
+    .where(and(...filters))
+    .limit(1);
+
+  if (overlap) throw conflictError(OVERLAPPING_SCHEDULE_MESSAGE, 'startTime');
+}
+
+async function lockGroupSchedule(groupId: string, database: ScheduleTransaction): Promise<void> {
+  // Serializa altas/ediciones del mismo grupo para que un doble clic no supere la comprobación.
+  await database.execute(
+    sql`select pg_advisory_xact_lock(hashtext('vision-attendance:schedules'), hashtext(${groupId}))`,
+  );
+}
+
 export async function addSchedule(
   input: unknown,
   database?: AcademicDatabase,
 ): Promise<ScheduleRow> {
   const values = parseInput(scheduleInputSchema, input);
+  const database_ = resolveDatabase(database);
 
-  const [row] = await withTranslatedErrors(() =>
-    resolveDatabase(database).insert(schedules).values(values).returning(scheduleColumns),
+  const row = await withTranslatedErrors(() =>
+    database_.transaction(async (tx) => {
+      await lockGroupSchedule(values.groupId, tx);
+      await ensureScheduleDoesNotOverlap(values, tx);
+      const [created] = await tx.insert(schedules).values(values).returning(scheduleColumns);
+      return created;
+    }),
   );
 
   if (!row) throw notFoundError('No se pudo crear la franja del horario.');
@@ -192,13 +241,19 @@ export async function updateSchedule(
 ): Promise<ScheduleRow> {
   const scheduleId = parseInput(scheduleIdSchema, id);
   const values = parseInput(scheduleInputSchema, input);
+  const database_ = resolveDatabase(database);
 
-  const [row] = await withTranslatedErrors(() =>
-    resolveDatabase(database)
-      .update(schedules)
-      .set(values)
-      .where(eq(schedules.id, scheduleId))
-      .returning(scheduleColumns),
+  const row = await withTranslatedErrors(() =>
+    database_.transaction(async (tx) => {
+      await lockGroupSchedule(values.groupId, tx);
+      await ensureScheduleDoesNotOverlap(values, tx, scheduleId);
+      const [updated] = await tx
+        .update(schedules)
+        .set(values)
+        .where(eq(schedules.id, scheduleId))
+        .returning(scheduleColumns);
+      return updated;
+    }),
   );
 
   if (!row) throw notFoundError('La franja del horario no existe.');

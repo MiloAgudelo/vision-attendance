@@ -39,7 +39,7 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
   const { id } = await params;
 
   const group = await getGroup(id).catch((error: unknown) => {
-    if (isDomainError(error) && error.code === 'not_found') notFound();
+    if (isDomainError(error) && ['not_found', 'validation'].includes(error.code)) notFound();
     throw error;
   });
 
@@ -53,6 +53,27 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
 
   const active = enrollments.filter((enrollment) => enrollment.status === 'active');
   const withdrawn = enrollments.filter((enrollment) => enrollment.status === 'inactive');
+  const subjectOptions = subjects.map((subject) => ({
+    value: subject.id,
+    label: `${subject.code} — ${subject.name}`,
+  }));
+  if (!subjectOptions.some((subject) => subject.value === group.subjectId)) {
+    subjectOptions.push({
+      value: group.subjectId,
+      label: `${group.subjectCode} — ${group.subjectName} (actual, inactiva)`,
+    });
+  }
+
+  const teacherOptions = teachers.map((teacher) => ({
+    value: teacher.id,
+    label: teacher.fullName,
+  }));
+  if (group.teacherId && !teacherOptions.some((teacher) => teacher.value === group.teacherId)) {
+    teacherOptions.push({
+      value: group.teacherId,
+      label: `${group.teacherName ?? 'Profesor asignado'} (actual, no disponible)`,
+    });
+  }
 
   return (
     <>
@@ -80,10 +101,7 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
               name: 'subjectId',
               label: 'Materia',
               defaultValue: group.subjectId,
-              options: subjects.map((subject) => ({
-                value: subject.id,
-                label: `${subject.code} — ${subject.name}`,
-              })),
+              options: subjectOptions,
               required: true,
             },
             {
@@ -105,10 +123,7 @@ export default async function GroupDetailPage({ params }: { params: Promise<{ id
               name: 'teacherId',
               label: 'Profesor (opcional)',
               defaultValue: group.teacherId ?? '',
-              options: teachers.map((teacher) => ({
-                value: teacher.id,
-                label: teacher.fullName,
-              })),
+              options: teacherOptions,
               placeholder: 'Sin asignar',
             },
             {

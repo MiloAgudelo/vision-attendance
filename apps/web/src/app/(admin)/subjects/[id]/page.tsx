@@ -19,7 +19,7 @@ export default async function EditSubjectPage({ params }: { params: Promise<{ id
   const { id } = await params;
 
   const subject = await getSubject(id).catch((error: unknown) => {
-    if (isDomainError(error) && error.code === 'not_found') notFound();
+    if (isDomainError(error) && ['not_found', 'validation'].includes(error.code)) notFound();
     throw error;
   });
 

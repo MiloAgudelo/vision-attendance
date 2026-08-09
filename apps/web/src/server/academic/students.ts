@@ -4,11 +4,11 @@
  * Minimización de datos (`docs/alcance-v2.md` §16): de un estudiante se guardan solo su nombre, su
  * código estudiantil y su estado. Nada más.
  *
- * El carnet se lee para mostrarlo, pero no se edita aquí: la asociación de carnets y el
- * enrolamiento por escaneo son de la lane W2 (`docs/agent-playbook.md` §4).
+ * La asociación de carnets y el enrolamiento por escaneo pertenecen íntegramente a W2
+ * (`docs/agent-playbook.md` §4); este módulo no consulta ni publica UIDs.
  */
 
-import { cards, students } from '@va/db';
+import { enrollments, students } from '@va/db';
 import { and, asc, eq, ilike, or } from 'drizzle-orm';
 import { z } from 'zod';
 
@@ -60,8 +60,6 @@ export interface StudentRow {
   studentCode: string;
   fullName: string;
   status: 'active' | 'inactive';
-  /** UID del carnet activo, si tiene uno. Solo lectura: lo administra W2. */
-  cardUid: string | null;
 }
 
 export interface ListStudentsOptions {
@@ -76,7 +74,6 @@ const studentColumns = {
   studentCode: students.studentCode,
   fullName: students.fullName,
   status: students.status,
-  cardUid: cards.uid,
 } as const;
 
 export async function listStudents(
@@ -93,15 +90,11 @@ export async function listStudents(
       : undefined,
   ].filter((filter) => filter !== undefined);
 
-  return (
-    resolveDatabase(database)
-      .select(studentColumns)
-      .from(students)
-      // El carnet es opcional y solo se muestra el activo (`cards_uid_active_unique`).
-      .leftJoin(cards, and(eq(cards.studentId, students.id), eq(cards.status, 'active')))
-      .where(filters.length > 0 ? and(...filters) : undefined)
-      .orderBy(asc(students.fullName))
-  );
+  return resolveDatabase(database)
+    .select(studentColumns)
+    .from(students)
+    .where(filters.length > 0 ? and(...filters) : undefined)
+    .orderBy(asc(students.fullName));
 }
 
 /** Devuelve un estudiante por su id. @throws {DomainError} `not_found` si no existe. */
@@ -111,7 +104,6 @@ export async function getStudent(id: string, database?: AcademicDatabase): Promi
   const [row] = await resolveDatabase(database)
     .select(studentColumns)
     .from(students)
-    .leftJoin(cards, and(eq(cards.studentId, students.id), eq(cards.status, 'active')))
     .where(eq(students.id, studentId))
     .limit(1);
 
@@ -139,8 +131,7 @@ export async function createStudent(
   );
 
   if (!row) throw notFoundError('No se pudo crear el estudiante.');
-  // Un estudiante recién creado no tiene carnet: asociarlo es competencia de W2.
-  return { ...row, cardUid: null };
+  return row;
 }
 
 export async function updateStudent(
@@ -173,15 +164,28 @@ export async function setStudentStatus(
   database?: AcademicDatabase,
 ): Promise<StudentRow> {
   const studentId = parseInput(studentIdSchema, id);
+  const database_ = resolveDatabase(database);
 
-  const [row] = await resolveDatabase(database)
-    .update(students)
-    .set({ status })
-    .where(eq(students.id, studentId))
-    .returning({ id: students.id });
+  const row = await database_.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(students)
+      .set({ status })
+      .where(eq(students.id, studentId))
+      .returning({ id: students.id });
 
-  if (!row) throw notFoundError('El estudiante no existe.');
-  return getStudent(row.id, database);
+    if (!updated) throw notFoundError('El estudiante no existe.');
+
+    if (status === 'inactive') {
+      await tx
+        .update(enrollments)
+        .set({ status: 'inactive' })
+        .where(and(eq(enrollments.studentId, studentId), eq(enrollments.status, 'active')));
+    }
+
+    return updated;
+  });
+
+  return getStudent(row.id, database_);
 }
 
 export function deactivateStudent(id: string, database?: AcademicDatabase): Promise<StudentRow> {

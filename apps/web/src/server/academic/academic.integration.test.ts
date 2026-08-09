@@ -22,7 +22,7 @@ import {
   subjects as subjectsTable,
   type Database,
 } from '@va/db';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
@@ -33,7 +33,7 @@ import {
 } from './enrollments';
 import { DomainError, translateDatabaseError } from './errors';
 import { createGroup, deactivateGroup, getGroup, listGroups, updateGroup } from './groups';
-import { addSchedule, listSchedulesByGroup, removeSchedule } from './schedules';
+import { addSchedule, listSchedulesByGroup, removeSchedule, updateSchedule } from './schedules';
 import { createStudent, deactivateStudent, listStudents } from './students';
 import { createSubject, deactivateSubject, listSubjects } from './subjects';
 
@@ -194,6 +194,9 @@ describe('unicidad de inscripciones: UNIQUE(group_id, student_id)', () => {
 describe('soft-delete: dar de baja no borra la fila y la saca de los listados', () => {
   it('estudiantes', async () => {
     const student = await newStudent('Estudiante Que Se Da De Baja');
+    const subject = await newSubject();
+    const group = await newGroup(subject.id, 'G-BAJA-EST', `2026-2-${suffix}`);
+    await enrollStudent({ groupId: group.id, studentId: student.id }, db);
 
     await deactivateStudent(student.id, db);
 
@@ -208,6 +211,17 @@ describe('soft-delete: dar de baja no borra la fila y la saca de los listados', 
 
     const todos = await listStudents({ includeInactive: true }, db);
     expect(todos.map((item) => item.id)).toContain(student.id);
+
+    const [enrollment] = await db
+      .select({ status: enrollmentsTable.status })
+      .from(enrollmentsTable)
+      .where(
+        and(
+          eq(enrollmentsTable.groupId, group.id),
+          eq(enrollmentsTable.studentId, student.id),
+        ),
+      );
+    expect(enrollment).toEqual({ status: 'inactive' });
   });
 
   it('materias', async () => {
@@ -281,6 +295,19 @@ describe('RN2: la ventana de sesión es configurable por grupo', () => {
         name: 'G-VENTANA',
         term: `2026-2-${suffix}`,
         sessionWindowMinutes: 25,
+      },
+      db,
+    );
+
+    expect((await getGroup(group.id, db)).sessionWindowMinutes).toBe(25);
+
+    await updateGroup(
+      group.id,
+      {
+        subjectId: subject.id,
+        name: 'G-VENTANA',
+        term: `2026-2-${suffix}`,
+        sessionWindowMinutes: '',
       },
       db,
     );
@@ -368,5 +395,74 @@ describe('horario semanal del grupo', () => {
 
     await removeSchedule(slot.id, db);
     expect(await listSchedulesByGroup(group.id, db)).toHaveLength(0);
+  });
+
+  it('rechaza franjas idénticas o solapadas en el mismo día', async () => {
+    const subject = await newSubject();
+    const group = await newGroup(subject.id, 'G-SOLAPA', `2026-2-${suffix}`);
+    const first = {
+      groupId: group.id,
+      weekday: 2,
+      startTime: '18:00',
+      endTime: '20:00',
+    };
+
+    await addSchedule(first, db);
+
+    for (const candidate of [
+      first,
+      { ...first, startTime: '19:00', endTime: '21:00' },
+      { ...first, startTime: '17:00', endTime: '19:00' },
+    ]) {
+      await expect(addSchedule(candidate, db)).rejects.toMatchObject({
+        code: 'conflict',
+        message: 'La franja se solapa con otro horario del grupo en el mismo día.',
+      });
+    }
+
+    await expect(
+      addSchedule({ ...first, startTime: '20:00', endTime: '21:00' }, db),
+    ).resolves.toMatchObject({ startTime: '20:00:00' });
+  });
+
+  it('serializa dos altas simultáneas de la misma franja', async () => {
+    const subject = await newSubject();
+    const group = await newGroup(subject.id, 'G-DOBLE', `2026-2-${suffix}`);
+    const input = {
+      groupId: group.id,
+      weekday: 3,
+      startTime: '18:00',
+      endTime: '20:00',
+    };
+
+    const outcomes = await Promise.allSettled([addSchedule(input, db), addSchedule(input, db)]);
+
+    expect(outcomes.filter((outcome) => outcome.status === 'fulfilled')).toHaveLength(1);
+    expect(outcomes.filter((outcome) => outcome.status === 'rejected')).toHaveLength(1);
+    expect(await listSchedulesByGroup(group.id, db)).toHaveLength(1);
+  });
+
+  it('rechaza una edición que solape otra franja', async () => {
+    const subject = await newSubject();
+    const group = await newGroup(subject.id, 'G-EDITA', `2026-2-${suffix}`);
+    await addSchedule(
+      { groupId: group.id, weekday: 4, startTime: '18:00', endTime: '19:00' },
+      db,
+    );
+    const second = await addSchedule(
+      { groupId: group.id, weekday: 4, startTime: '20:00', endTime: '21:00' },
+      db,
+    );
+
+    await expect(
+      updateSchedule(
+        second.id,
+        { groupId: group.id, weekday: 4, startTime: '18:30', endTime: '20:30' },
+        db,
+      ),
+    ).rejects.toMatchObject({
+      code: 'conflict',
+      message: 'La franja se solapa con otro horario del grupo en el mismo día.',
+    });
   });
 });
