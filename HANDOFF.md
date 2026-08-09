@@ -2,16 +2,74 @@
 
 Estado del proyecto para continuar en otra sesión. Última actualización: 2026-08-09.
 
-## 0. Actualización de cierre — fase 2 completa
+## 0. Actualización de cierre — fase 3 completa
+
+W4 quedó mergeada por squash en `main`:
+
+| PR                                                              | Lane                   | Merge en `main`                                        |
+| --------------------------------------------------------------- | ---------------------- | ------------------------------------------------------ |
+| [#16](https://github.com/MiloAgudelo/vision-attendance/pull/16) | W4 motor de asistencia | `55ad4a4 feat(web): implementa el motor de asistencia` |
+
+### Entregables cerrados
+
+- Resolución de horarios locales en `America/Bogota`, ventana inclusiva RN2 y sesiones perezosas
+  RN3 con `ON CONFLICT DO NOTHING` + relectura.
+- Asistencia idempotente RN6, serialización concurrente por sesión/estudiante y uso exclusivo de
+  `received_at` como hora oficial RN8.
+- Correcciones manuales admin-only con motivo, actor, valores anterior/nuevo y auditoría RN9.
+- Consultas server-side para sesión en vivo, ausentes calculados, historial, correcciones y bitácora
+  de eventos; W5 no necesita consultar Drizzle desde componentes.
+- El pipeline de W2 usa el motor W4 por defecto. El cambio mínimo en
+  `apps/web/src/server/events/ingest.ts` fue autorizado expresamente por el responsable porque el
+  playbook exige reemplazar el stub, aunque el archivo pertenecía originalmente a W2.
+
+No hubo migraciones ni cambios en el esquema físico o el contrato v1.
+
+### Decisión reversible declarada en #16
+
+Si varias franjas contienen el evento, el motor prioriza: inscripción activa → coincidencia de
+salón → inicio más cercano. El esquema no relaciona dispositivo y grupo; este desempate evita una
+migración y puede reemplazarse cuando exista esa relación.
+
+### Puerta de salida verificada sobre W4 y `main`
+
+- Matriz obligatoria W4: **13/13** (10 integración con PostgreSQL real + 3 zona horaria).
+- `pnpm test`: **430/430** (shared 98, db 23, simulador 136, web 173).
+- `pnpm lint`, `pnpm typecheck`, `pnpm build` y CI de #16: verdes.
+- Revisión adversarial: sin hallazgos críticos/altos después de conectar el endpoint. W5 debe
+  derivar el `userId` de corrección de la sesión autenticada, nunca del formulario.
+- Smoke real en `va_w4` contra Next.js local y el simulador: cinco reintentos concurrentes del
+  mismo `eventId` devolvieron la respuesta `registered` idéntica; un evento nuevo del mismo UID
+  devolvió `already_registered`. PostgreSQL confirmó 2 eventos, 1 sesión y 1 asistencia, con
+  `checked_in_at` igual al `received_at` del primer evento.
+
+El fixture del smoke se eliminó al terminar. Se usó el puerto 3104 porque el 3000 estaba ocupado
+por un proceso ajeno de otro repositorio; no se tocó ese proceso. PostgreSQL se apagó una vez de
+forma inesperada durante el gate, se reencendió cuando solo quedaba el agente raíz y `va_w4` volvió
+a migrar y probar correctamente.
+
+### Siguiente trabajo
+
+Fase 4, W5: UI de sesión en vivo con polling de 3–5 s, historial por sesión/estudiante,
+correcciones admin-only, bitácora y Supabase Auth con autorización server-side para admin/teacher.
+Todas las pantallas administrativas existentes siguen abiertas y deben quedar protegidas. Los
+textos son en español y W5 consume las funciones de `src/server/attendance/` ya disponibles.
+
+Los commits históricos `c915adc` y `cc61e29` no se tocaron; sigue pendiente la decisión expresa
+del responsable antes de cualquier reescritura de `main`.
+
+---
+
+## 0.1 Actualización de cierre — fase 2 completa (histórico)
 
 La fase 2 quedó mergeada en `main`, en el orden obligatorio y por squash con título
 Conventional Commit:
 
-| PR | Lane | Merge en `main` |
-|---|---|---|
-| #12 | W3 simulador | `793c640 feat(simulator): añade el simulador de dispositivo RFID` |
+| PR  | Lane                      | Merge en `main`                                                          |
+| --- | ------------------------- | ------------------------------------------------------------------------ |
+| #12 | W3 simulador              | `793c640 feat(simulator): añade el simulador de dispositivo RFID`        |
 | #13 | W2 dispositivos + eventos | `5759aab feat(web): añade los dispositivos y la ingesta de eventos RFID` |
-| #14 | W1 dominio académico | `11d3e3b feat(web): añade el dominio académico con su administración` |
+| #14 | W1 dominio académico      | `11d3e3b feat(web): añade el dominio académico con su administración`    |
 
 ### Correcciones cerradas
 
@@ -44,7 +102,7 @@ requirieron migraciones. No cambió el contrato v1, el esquema físico ni las mi
 real. Se creó de forma aislada, sin `db:reset`, y quedó migrada/sembrada. PostgreSQL compartido
 sigue encendido en `127.0.0.1:54322`.
 
-### Siguiente trabajo
+### Siguiente trabajo al cerrar fase 2 (completado)
 
 Crear W4 desde `main@11d3e3b`: motor de asistencia en
 `apps/web/src/server/{attendance,sessions}/`, reemplazando el stub de W2. W4 es la única lane que
@@ -81,12 +139,12 @@ de verificar la estabilidad del UID, ver `alcance-v2.md` §18).
 
 ## 2. Entorno (verificado — no volver a investigarlo)
 
-| Herramienta | Estado |
-|---|---|
-| node 24.18 · pnpm 11.18 · gh 2.97 autenticado · git 2.55 | ✅ |
-| Docker / Docker Desktop | ❌ **no existe** |
-| Supabase CLI | ❌ **no existe** |
-| PostgreSQL del sistema / psql | ❌ **no existe** |
+| Herramienta                                              | Estado           |
+| -------------------------------------------------------- | ---------------- |
+| node 24.18 · pnpm 11.18 · gh 2.97 autenticado · git 2.55 | ✅               |
+| Docker / Docker Desktop                                  | ❌ **no existe** |
+| Supabase CLI                                             | ❌ **no existe** |
+| PostgreSQL del sistema / psql                            | ❌ **no existe** |
 
 **La base de datos local no usa Docker.** Se resolvió con el paquete npm `embedded-postgres`
 (binarios reales de PostgreSQL **17.10**, sin admin), gestionado con `pg_ctl` desde
@@ -105,7 +163,7 @@ Supabase, ambas vías son intercambiables sin tocar código. El CI usa un servic
 > lane (ver §7).
 
 Bases ya creadas en ese servidor: `postgres` (la de desarrollo, con seed), `va_w1`, `va_w2`,
-`va_w3`, `va_integracion`.
+`va_w3`, `va_w4`, `va_integracion`.
 
 ---
 
@@ -128,11 +186,11 @@ Monorepo pnpm funcional con CI en verde:
 
 ### PRs abiertas — fase 2, las tres en **borrador** y basadas en `main`
 
-| PR | Lane | Estado |
-|---|---|---|
-| [#12](https://github.com/MiloAgudelo/vision-attendance/pull/12) | **W3** simulador | ✅ verificada (2 verificadores) y **corregida**. 136 pruebas. |
+| PR                                                              | Lane                                     | Estado                                                                        |
+| --------------------------------------------------------------- | ---------------------------------------- | ----------------------------------------------------------------------------- |
+| [#12](https://github.com/MiloAgudelo/vision-attendance/pull/12) | **W3** simulador                         | ✅ verificada (2 verificadores) y **corregida**. 136 pruebas.                 |
 | [#13](https://github.com/MiloAgudelo/vision-attendance/pull/13) | **W2** dispositivos + ingesta de eventos | ⚠️ verificada **solo parcialmente** (1 de 3 verificadores). **Sin corregir.** |
-| [#14](https://github.com/MiloAgudelo/vision-attendance/pull/14) | **W1** dominio académico | ⚠️ verificada (3 verificadores). **Sin corregir.** |
+| [#14](https://github.com/MiloAgudelo/vision-attendance/pull/14) | **W1** dominio académico                 | ⚠️ verificada (3 verificadores). **Sin corregir.**                            |
 
 Se pidió `@codex review` en las tres. Las ramas locales existen con esos mismos nombres
 (`w1/dominio-academico`, `w2/dispositivos-y-eventos`, `w3/simulador`).
@@ -168,11 +226,13 @@ cálculo tz con horario local vs timestamps UTC, y `scannedAt` incorrecto que no
 `checked_in_at`.
 
 ### 4.4 Fase 4 — W5, UI de asistencia
+
 Vista de sesión en vivo con polling 3–5 s, historial, correcciones, login Supabase Auth con roles.
 Textos en español. **Hoy no hay ninguna autenticación**: las pantallas de administración están
 abiertas y W5 debe ponerlas detrás de autorización por rol.
 
 ### 4.5 Fase 5 — W6, estabilización
+
 e2e con el simulador como cliente, matriz de casos, revisión de seguridad, docs de despliegue.
 
 ---
@@ -188,7 +248,7 @@ Tres verificadores independientes. Los que coincidieron en más de uno están ma
 - **`students.ts` lee la tabla `cards` y publica el UID** en el listado y en la ficha
   (`students.ts:11,79,101`; `students/page.tsx:101`; `students/[id]/page.tsx` panel «Carnet»).
   El encargo de W1 prohíbe expresamente los carnets —son de W2— y limita el dato del estudiante a
-  nombre, código y estado (minimización, `alcance-v2.md` §16). *(3 de 3 verificadores)*
+  nombre, código y estado (minimización, `alcance-v2.md` §16). _(3 de 3 verificadores)_
   → Quitar el import de `cards`, el campo `cardUid` y los dos `leftJoin`; eliminar la columna y el
   panel «Carnet». W2 aportará esa vista en su subárbol.
 
@@ -198,21 +258,21 @@ Tres verificadores independientes. Los que coincidieron en más de uno están ma
   por `student_id`, así que un estudiante con dos carnets activos (reposición sin desactivar el
   anterior, que es justo el caso que `cards` existe para soportar) **aparece dos veces** en
   `/students`, con `key` de React repetida, y **infla el contador** «Estudiantes activos» del panel.
-  Se resuelve solo al aplicar el bloqueante. *(3 de 3)*
+  Se resuelve solo al aplicar el bloqueante. _(3 de 3)_
 - **Editar un grupo puede borrarle el profesor en silencio.** `listTeachers` solo devuelve
   profesores **activos**; si el profesor asignado pasa a `inactive` (o tiene rol `admin`, escenario
   contemplado en `alcance-v2.md` §17.5), el `<select>` no contiene su id, el navegador selecciona
   «Sin asignar», y guardar **cualquier otro campo** pone `teacher_id` a NULL sin avisar. W5 necesita
-  ese vínculo para la vista del profesor. (`groups/[id]/page.tsx:105`, `actions.ts:32`) *(2 de 3)*
+  ese vínculo para la vista del profesor. (`groups/[id]/page.tsx:105`, `actions.ts:32`) _(2 de 3)_
 - **Un grupo cuya materia fue dada de baja queda inaccesible.** El `<select>` de materia solo lista
   materias activas y es `required`: el formulario no deja guardar, así que ya no se puede editar ni
   la ventana de sesión de RN2. Y si el admin elige otra materia para desbloquearlo, **el grupo
-  cambia de materia sin aviso**. (`groups/[id]/page.tsx:47,82`) *(2 de 3)*
+  cambia de materia sin aviso**. (`groups/[id]/page.tsx:47,82`) _(2 de 3)_
 - **No hay validación de solapamiento de horarios.** `addSchedule`/`updateSchedule` admiten dos
   franjas idénticas (doble clic en «Añadir franja») y, peor, dos solapadas el mismo día
   (18:00–20:00 y 19:00–21:00). Un escaneo a las 19:30 caería dentro de la ventana de **dos sesiones
   del mismo grupo**, y RN6 solo garantiza unicidad por (sesión, estudiante).
-  **Esto le explota a W4**, no a W1. (`schedules.ts:71-95,174`) *(2 de 3)*
+  **Esto le explota a W4**, no a W1. (`schedules.ts:71-95,174`) _(2 de 3)_
 - **Dar de baja a un estudiante no retira sus inscripciones.** Siguen `active`, el grupo lo sigue
   contando como inscrito, y como `/students` ya no lo muestra, el admin no tiene forma de saber
   dónde quedó inscrito. Contradice que `enrollStudent` sí prohíba inscribir a alguien dado de baja.
@@ -229,7 +289,7 @@ Tres verificadores independientes. Los que coincidieron en más de uno están ma
 - Con una hora inválida (`25:00`), el `refine` de objeto añade un **segundo mensaje falso** sobre la
   hora de fin. La prueba solo mira `issues[0]`, por eso no lo detecta. (`schedules.ts:90`)
 - **W1 modificó `apps/web/src/app/page.tsx`**, la portada, que está fuera de su subárbol y es
-  territorio de W5. *(3 de 3)* → Revertir; el panel ya es accesible por `/admin`.
+  territorio de W5. _(3 de 3)_ → Revertir; el panel ya es accesible por `/admin`.
 
 ### 5.2 W2 — dispositivos e ingesta (PR #13)
 
@@ -293,8 +353,8 @@ Se deja constancia de lo que se arregló, porque explica decisiones del diseño:
   pnpm install --frozen-lockfile   # comprobar que el lockfile quedó coherente
   ```
 - **`apps/web/next-env.d.ts` bloquea los rebase.** El primer commit de `f1/web-esqueleto` lo versiona
-  y el último deja de hacerlo; como Next.js lo regenera, un rebase se detiene con *«untracked working
-  tree files would be overwritten»*. Basta `rm -f apps/web/next-env.d.ts` antes de rebasar.
+  y el último deja de hacerlo; como Next.js lo regenera, un rebase se detiene con _«untracked working
+  tree files would be overwritten»_. Basta `rm -f apps/web/next-env.d.ts` antes de rebasar.
 - **Los workflows de agentes se cortan por el límite de gasto de la organización.** Ha pasado tres
   veces, siempre a mitad. **El trabajo commiteado sobrevive**; lo que se pierde son los agentes que
   no habían terminado. Al retomar, revisa el estado real de git antes de suponer que algo falta, y
