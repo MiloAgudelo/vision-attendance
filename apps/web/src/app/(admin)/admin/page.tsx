@@ -4,6 +4,7 @@
 
 import Link from 'next/link';
 
+import { requireRole } from '@/app/_lib/auth/guards';
 import { listGroups } from '@/server/academic/groups';
 import { listWeeklySchedule } from '@/server/academic/schedules';
 import { listStudents } from '@/server/academic/students';
@@ -16,6 +17,8 @@ import { ADMIN_SECTIONS } from '../_lib/sections';
 export const dynamic = 'force-dynamic';
 
 export default async function AdminHomePage() {
+  await requireRole('admin');
+
   const [students, subjects, groups, slots] = await Promise.all([
     listStudents(),
     listSubjects(),

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { requireRole } from '@/app/_lib/auth/guards';
 import { listDevices } from '@/server/devices/devices';
 
 import { DeviceRowActions } from './device-row-actions';
@@ -24,6 +25,8 @@ const STATUS_LABEL = {
 } as const;
 
 export default async function DevicesPage() {
+  await requireRole('admin');
+
   const devices = await listDevices();
 
   return (

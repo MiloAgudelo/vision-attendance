@@ -6,6 +6,7 @@
  * (`docs/architecture.md` §6).
  */
 
+import { requireRole } from '@/app/_lib/auth/guards';
 import { isDomainError } from '@/server/academic/errors';
 
 import type { FormState } from './form-state';
@@ -17,6 +18,7 @@ import type { FormState } from './form-state';
  * excepción de control con la que Next.js implementa `redirect()`.
  */
 export async function runFormAction(run: () => Promise<string>): Promise<FormState> {
+  await requireRole('admin');
   try {
     return { status: 'success', message: await run(), fieldErrors: {} };
   } catch (error) {

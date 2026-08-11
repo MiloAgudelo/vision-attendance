@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
+import { requireRole } from '@/app/_lib/auth/guards';
 import { isDomainError } from '@/server/academic/errors';
 import { listGroups } from '@/server/academic/groups';
 import { getSubject } from '@/server/academic/subjects';
@@ -16,6 +17,8 @@ import { activateSubjectAction, deactivateSubjectAction, updateSubjectAction } f
 export const dynamic = 'force-dynamic';
 
 export default async function EditSubjectPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireRole('admin');
+
   const { id } = await params;
 
   const subject = await getSubject(id).catch((error: unknown) => {

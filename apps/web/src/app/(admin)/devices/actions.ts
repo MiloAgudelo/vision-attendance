@@ -6,12 +6,13 @@
  * Los componentes nunca hablan con Drizzle (`docs/architecture.md` §4.3): estas acciones son el
  * único puente entre los formularios y `src/server/devices/`.
  *
- * Todavía **no hay autenticación** (login y roles son de la lane W5): estas acciones quedan
- * abiertas a propósito y W5 las pondrá detrás de autorización de administrador.
+ * Cada mutación exige una sesión de administrador, incluso si se invoca la action sin pasar por
+ * la pantalla protegida.
  */
 
 import { revalidatePath } from 'next/cache';
 
+import { requireRole } from '@/app/_lib/auth/guards';
 import { createDevice, revokeDevice, setDeviceMode } from '@/server/devices/devices';
 import { BusinessRuleError } from '@/server/devices/errors';
 import { deviceModeSchema } from '@/server/devices/schemas';
@@ -41,6 +42,7 @@ export async function createDeviceAction(
   _previous: CreateDeviceState,
   formData: FormData,
 ): Promise<CreateDeviceState> {
+  await requireRole('admin');
   try {
     const { device, apiKey } = await createDevice({
       name: text(formData, 'name'),
@@ -64,6 +66,7 @@ export async function revokeDeviceAction(
   _previous: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  await requireRole('admin');
   try {
     const device = await revokeDevice(text(formData, 'deviceId'));
     revalidatePath(DEVICES_PATH);
@@ -78,6 +81,7 @@ export async function setDeviceModeAction(
   _previous: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  await requireRole('admin');
   try {
     const mode = deviceModeSchema.safeParse(text(formData, 'mode'));
     if (!mode.success) return { status: 'error', message: 'Modo de dispositivo inválido.' };

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 
+import { requireRole } from '@/app/_lib/auth/guards';
 import { listGroups, listTeachers, DEFAULT_SESSION_WINDOW_MINUTES } from '@/server/academic/groups';
 import { listSubjects } from '@/server/academic/subjects';
 
@@ -18,6 +19,8 @@ export default async function GroupsPage({
 }: {
   searchParams: Promise<{ inactivos?: string }>;
 }) {
+  await requireRole('admin');
+
   const { inactivos } = await searchParams;
   const includeInactive = inactivos === '1';
 

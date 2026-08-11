@@ -3,12 +3,12 @@
 /**
  * Server action del enrolamiento de carnets.
  *
- * Sin autenticación todavía (login y roles son de la lane W5): W5 pondrá esta pantalla detrás de
- * autorización de administrador.
+ * La autorización también vive en la action para impedir mutaciones directas por fuera del layout.
  */
 
 import { revalidatePath } from 'next/cache';
 
+import { requireRole } from '@/app/_lib/auth/guards';
 import { assignCardToStudent } from '@/server/devices/enrollment';
 import { BusinessRuleError } from '@/server/devices/errors';
 
@@ -26,6 +26,7 @@ export async function assignCardAction(
   _previous: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  await requireRole('admin');
   try {
     const assigned = await assignCardToStudent({
       cardId: text(formData, 'cardId'),
