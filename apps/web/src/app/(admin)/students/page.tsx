@@ -6,6 +6,7 @@
 
 import Link from 'next/link';
 
+import { requireRole } from '@/app/_lib/auth/guards';
 import { listStudents } from '@/server/academic/students';
 
 import { ActionButton } from '../_components/action-button';
@@ -21,6 +22,8 @@ export default async function StudentsPage({
 }: {
   searchParams: Promise<{ q?: string; inactivos?: string }>;
 }) {
+  await requireRole('admin');
+
   const { q = '', inactivos } = await searchParams;
   const includeInactive = inactivos === '1';
 

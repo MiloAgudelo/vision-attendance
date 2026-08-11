@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 
+import { requireRole } from '@/app/_lib/auth/guards';
 import { listSubjects } from '@/server/academic/subjects';
 
 import { ActionButton } from '../_components/action-button';
@@ -17,6 +18,8 @@ export default async function SubjectsPage({
 }: {
   searchParams: Promise<{ inactivas?: string }>;
 }) {
+  await requireRole('admin');
+
   const { inactivas } = await searchParams;
   const includeInactive = inactivas === '1';
 

@@ -7,6 +7,7 @@
 
 import Link from 'next/link';
 
+import { requireRole } from '@/app/_lib/auth/guards';
 import { WEEKDAYS, listWeeklySchedule } from '@/server/academic/schedules';
 
 import { EmptyState, PageHeader, Panel } from '../_components/ui';
@@ -22,6 +23,8 @@ export default async function SchedulesPage({
 }: {
   searchParams: Promise<{ inactivos?: string }>;
 }) {
+  await requireRole('admin');
+
   const { inactivos } = await searchParams;
   const includeInactiveGroups = inactivos === '1';
 

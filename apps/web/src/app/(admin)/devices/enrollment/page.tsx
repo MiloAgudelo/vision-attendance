@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { requireRole } from '@/app/_lib/auth/guards';
 import {
   listAssignableStudents,
   listPendingCards,
@@ -17,6 +18,8 @@ export const metadata = {
 };
 
 export default async function EnrollmentPage() {
+  await requireRole('admin');
+
   const [pendingCards, students, captures] = await Promise.all([
     listPendingCards(),
     listAssignableStudents(),

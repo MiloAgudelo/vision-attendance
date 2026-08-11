@@ -14,6 +14,10 @@ export default defineConfig({
   test: {
     // Solo se prueba lógica de servidor: no hace falta un DOM.
     environment: 'node',
+    // Las suites de integración comparten la base indicada por DATABASE_URL. Ejecutarlas por
+    // archivo en paralelo mezcla horarios recurrentes y permite que una suite borre fixtures que
+    // otra todavía usa; la serialización conserva el aislamiento sin reiniciar PostgreSQL.
+    fileParallelism: false,
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
   },
 });
