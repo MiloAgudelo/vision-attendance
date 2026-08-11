@@ -8,6 +8,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
+import { requireRole } from '@/app/_lib/auth/guards';
 import { listEnrollableStudents, listEnrollments } from '@/server/academic/enrollments';
 import { isDomainError } from '@/server/academic/errors';
 import { DEFAULT_SESSION_WINDOW_MINUTES, getGroup, listTeachers } from '@/server/academic/groups';
@@ -36,6 +37,8 @@ function shortTime(value: string): string {
 }
 
 export default async function GroupDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  await requireRole('admin');
+
   const { id } = await params;
 
   const group = await getGroup(id).catch((error: unknown) => {
