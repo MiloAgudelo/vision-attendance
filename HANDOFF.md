@@ -7,7 +7,8 @@ Estado operativo para continuar en otra sesión. Última actualización: **2026-
 
 - `main` está en `0a278de feat(web): añade autenticación y autorización por roles` (squash de #18).
 - Fases 2 y 3 cerradas. W1–W4 integradas. Auth W5 mergeada.
-- Rama actual de trabajo: `w5/ui-asistencia-en-vivo` (UI de asistencia; PR nueva).
+- Rama actual de trabajo: `w5/ui-asistencia-en-vivo`.
+- PR: [#19 — feat(web): añade la UI de asistencia en vivo](https://github.com/MiloAgudelo/vision-attendance/pull/19).
 - La UI de asistencia en vivo, historial, correcciones y bitácora está implementada en esa rama.
 - No hay migraciones, cambios de esquema ni cambios del contrato v1 en W5.
 - No se crearon recursos cloud. No hay proyecto Supabase remoto conectado en este entorno.
