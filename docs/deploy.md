@@ -25,11 +25,10 @@ No se usan Storage, Edge Functions ni Realtime en el MVP.
      en el cliente ni en `NEXT_PUBLIC_*`)
    - **Connection string** (modo URI) → `DATABASE_URL`
 3. Preferencias de conexión:
-   - Migraciones y `pnpm db:seed` / scripts: cadena **directa** (puerto `5432`) cuando esté
-     disponible.
-   - La app en Vercel puede usar el **pooler** (Supabase lo recomienda en serverless). El cliente
-     Drizzle ya desactiva prepared statements (`prepare: false`) para encajar con el pooler en modo
-     transacción.
+   - Para migraciones y scripts: **Session pooler** (puerto `5432`) si tu red no tiene IPv6.
+   - Para la app en Vercel: **Transaction pooler** (puerto **`6543`**). El cliente Drizzle ya
+     desactiva prepared statements (`prepare: false`). No uses session mode en serverless: el
+     cupo es pequeño (~15) y las lambdas lo agotan (`health` → `db:down`, `/admin` → 500).
 
 ## 2. Esquema (migraciones)
 
@@ -66,6 +65,28 @@ values
 
 Sin esa fila (o con `status = 'inactive'`), el login de Auth no abre la aplicación.
 
+### URLs de Auth (obligatorio en producción)
+
+El correo de “recuperar contraseña” usa el **Site URL** de Supabase. Si queda en
+`http://localhost:3000`, el enlace abre localhost.
+
+En [Authentication → URL Configuration](https://supabase.com/dashboard/project/_/auth/url-configuration):
+
+1. **Site URL:** `https://<proyecto>.vercel.app` (piloto:
+   `https://vision-attendance-web.vercel.app`)
+2. **Redirect URLs** (una por línea):
+
+   ```
+   http://localhost:3000/**
+   https://vision-attendance-web.vercel.app/**
+   https://*-vision-attendance-web.vercel.app/**
+   ```
+
+3. En Vercel, `NEXT_PUBLIC_SITE_URL` = la misma URL pública (sin barra final).
+4. Redeploy. Pide un enlace nuevo desde `/login/recover`; el anterior (con localhost) ya no vale.
+
+Atajo si no puedes esperar el correo: Authentication → Users → el usuario → asignar contraseña.
+
 ## 4. Datos del piloto
 
 Carga mínima recomendada (panel admin o SQL), en este orden:
@@ -93,7 +114,8 @@ Carga mínima recomendada (panel admin o SQL), en este orden:
 
    | Variable                         | Notas                                              |
    | -------------------------------- | -------------------------------------------------- |
-   | `DATABASE_URL`                   | Postgres de Supabase (pooler OK)                   |
+   | `DATABASE_URL`                   | Transaction pooler de Supabase (**puerto `6543`**) |
+   | `NEXT_PUBLIC_SITE_URL`           | URL pública, sin barra final (enlaces de Auth)     |
    | `NEXT_PUBLIC_SUPABASE_URL`       | Project URL                                        |
    | `NEXT_PUBLIC_SUPABASE_ANON_KEY`  | o `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`           |
    | `TZ`                             | `America/Bogota`                                   |
