@@ -110,6 +110,10 @@ Carga mínima recomendada (panel admin o SQL), en este orden:
    | Build Command   | `cd ../.. && pnpm --filter @va/shared --filter @va/db --filter @va/web run build` |
    | Node.js         | **22** (ver `engines` del `package.json` raíz)                        |
 
+   El `prebuild` de `@va/web` ya compila `@va/shared` y `@va/db`. Si Vercel deja el Build
+   Command por defecto (`pnpm run build`), el preview no se queda sin esos paquetes cuando
+   el `prepare` de la raíz se salta por caché.
+
 5. Variables de entorno del proyecto (Production / Preview):
 
    | Variable                         | Notas                                              |

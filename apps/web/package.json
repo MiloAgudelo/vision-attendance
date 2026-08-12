@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
+    "prebuild": "pnpm -C ../.. --filter @va/shared --filter @va/db run build",
     "build": "next build",
     "start": "next start",
     "typecheck": "next typegen && tsc -p tsconfig.json",
