@@ -2,6 +2,7 @@ packages:
   - 'apps/*'
   - 'packages/*'
   - 'tools/*'
+  - 'e2e'
 
 # pnpm 10+ bloquea los scripts de postinstall por defecto y pnpm 11 sustituyó
 # `onlyBuiltDependencies` por `allowBuilds`. Los paquetes marcados aquí con `true`
