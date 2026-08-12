@@ -6,6 +6,7 @@ const ADMIN_PAGES = [
   './admin/page.tsx',
   './devices/page.tsx',
   './devices/enrollment/page.tsx',
+  './events/page.tsx',
   './groups/page.tsx',
   './groups/[id]/page.tsx',
   './schedules/page.tsx',

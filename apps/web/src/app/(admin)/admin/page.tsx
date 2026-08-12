@@ -70,8 +70,8 @@ export default async function AdminHomePage() {
       </Panel>
 
       <p className="text-xs text-slate-500 dark:text-slate-400">
-        Estas pantallas todavía no exigen iniciar sesión. La autenticación con Supabase Auth y la
-        autorización por rol llegan con la lane W5.
+        El acceso exige una cuenta activa. Las correcciones y la bitácora RFID son solo para
+        administración; el profesor consulta sus sesiones desde el tablero de aula.
       </p>
     </>
   );

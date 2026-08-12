@@ -40,4 +40,15 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     label: 'Horarios',
     description: 'Consulta del horario semanal de todos los grupos activos, en hora de Bogotá.',
   },
+  {
+    href: '/sessions',
+    label: 'Sesiones',
+    description: 'Tablero de aula: sesiones en vivo, roster de presentes y ausentes, historial.',
+  },
+  {
+    href: '/events',
+    label: 'Bitácora RFID',
+    description:
+      'Consulta inmutable de eventos RFID recibidos (incluidos sin sesión o carnet desconocido).',
+  },
 ];
