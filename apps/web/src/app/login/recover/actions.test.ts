@@ -4,12 +4,11 @@ const createSupabaseServerClient = vi.hoisted(() => vi.fn());
 const getRequestOrigin = vi.hoisted(() => vi.fn());
 
 vi.mock('@/app/_lib/supabase/server', () => ({ createSupabaseServerClient }));
-vi.mock('@/app/_lib/supabase/origin', async () => {
-  const actual = await vi.importActual<typeof import('@/app/_lib/supabase/origin')>(
-    '@/app/_lib/supabase/origin',
-  );
-  return { ...actual, getRequestOrigin };
-});
+vi.mock('@/app/_lib/supabase/origin', () => ({
+  getRequestOrigin,
+  recoveryRedirectUrl: (origin: string) =>
+    `${origin.replace(/\/$/, '')}/auth/callback?next=/auth/update-password`,
+}));
 
 import { recoverAction } from './actions';
 import { RECOVER_IDLE } from './form-state';
