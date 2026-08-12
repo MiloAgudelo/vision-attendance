@@ -1,16 +1,23 @@
 @import 'tailwindcss';
 
 @theme {
-  --font-sans:
-    system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+  --font-sans: 'Segoe UI', 'Noto Sans', 'Helvetica Neue', Arial, sans-serif;
+  --color-board-ink: #0f2f2c;
+  --color-board-present: #134e4a;
+  --color-board-absent: #92400e;
+  --color-board-accent: #0f766e;
 }
 
 :root {
   color-scheme: light dark;
+  --board-glow:
+    radial-gradient(ellipse at top left, rgba(15, 118, 110, 0.16), transparent 55%),
+    radial-gradient(ellipse at bottom right, rgba(180, 83, 9, 0.1), transparent 50%),
+    linear-gradient(180deg, #f1f5f4 0%, #e8eef0 48%, #f8fafc 100%);
 }
 
 ::selection {
-  background: color-mix(in srgb, #0284c7 28%, transparent);
+  background: color-mix(in srgb, #0f766e 28%, transparent);
 }
 
 html {
@@ -18,5 +25,19 @@ html {
 }
 
 :focus-visible {
-  outline-color: #0284c7;
+  outline-color: #0f766e;
+}
+
+.classroom-board {
+  background-color: #f1f5f4;
+  background-image: var(--board-glow);
+}
+
+@media (prefers-color-scheme: dark) {
+  .classroom-board {
+    background-color: #020617;
+    background-image:
+      radial-gradient(ellipse at top left, rgba(45, 212, 191, 0.08), transparent 50%),
+      linear-gradient(180deg, #020617 0%, #0f172a 100%);
+  }
 }
