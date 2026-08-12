@@ -775,3 +775,39 @@ describe('última conexión del dispositivo', () => {
     expect(stored?.firmwareVersion).toBe('1.4.2');
   });
 });
+
+describe('rate-limit', () => {
+  it('responde 429 rate_limited sin escribir en rfid_events cuando se agota el cupo', async () => {
+    const { createSlidingWindowRateLimiter } = await import('./rate-limit.js');
+    const limiter = createSlidingWindowRateLimiter({ limit: 1, windowMs: 60_000 });
+    const device = await workspace.createDevice();
+    const uid = workspace.nextCardUid();
+    const clock = { ms: 1_000 };
+
+    const first = await ingestDeviceEvent({
+      authorization: bearer(device.apiKey),
+      body: deviceEventBody({ deviceId: device.name, cardUid: uid }),
+      database: workspace.database,
+      rateLimiter: limiter,
+      now: () => new Date(clock.ms),
+    });
+    expect(first.status).toBe(200);
+
+    const second = await ingestDeviceEvent({
+      authorization: bearer(device.apiKey),
+      body: deviceEventBody({ deviceId: device.name, cardUid: uid }),
+      database: workspace.database,
+      rateLimiter: limiter,
+      now: () => new Date(clock.ms + 10),
+    });
+    expect(second.status).toBe(429);
+    expect(second.body).toEqual({
+      ok: false,
+      error: 'rate_limited',
+      message: 'Demasiadas solicitudes',
+    });
+
+    expect(await countEvents(device.id, (first.body as { eventId: string }).eventId)).toBe(1);
+    expect(await eventsOfDevice(device.id)).toHaveLength(1);
+  });
+});

@@ -54,9 +54,9 @@ sembrada). No se ejecutó `db:down` ni `db:reset`.
 Fase 5 / **W6 estabilización** (en curso):
 
 1. ~~e2e del flujo completo con el simulador~~ → mergeado en `main` (`de5bb4f`, #21).
-2. Matriz del alcance (duplicados, atrasados, revocado, reasignación de carnet) → rama
-   `w6/matriz-alcance`.
-3. Revisión de seguridad (RLS deny-all, secretos, rate-limit básico).
+2. ~~Matriz del alcance (duplicados, atrasados, revocado, reasignación)~~ → mergeado en `main`
+   (`81f8aa3`, #22).
+3. Revisión de seguridad (RLS deny-all, secretos, rate-limit básico) → rama `w6/seguridad`.
 4. README/docs finales y despliegue documentado (Vercel + Supabase), sin crear recursos cloud.
 
 W6 hereda propiedad de CI/docs de F1 y escribe en `e2e/**`.
