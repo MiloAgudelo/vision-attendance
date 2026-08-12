@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
+import { AuthCallbackCatcher } from './_lib/supabase/auth-callback-catcher';
+
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -18,6 +20,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         data-design-mode="operate"
         data-design-seed="4e33298b"
       >
+        <AuthCallbackCatcher />
         {children}
       </body>
     </html>
