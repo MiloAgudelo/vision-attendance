@@ -78,7 +78,11 @@ vision-attendance/
 
 ## 5. Flujos de datos
 
-**Ingesta de evento:** dispositivo/simulador → `POST /api/v1/events` → auth dispositivo → ¿`(device_id, event_id)` ya existe? → sí: devolver respuesta almacenada (RN7) → no: resolver carnet → **insertar `rfid_events` (siempre, RN1)** → buscar/crear sesión en ventana (RN2/RN3) → verificar inscripción → insertar asistencia si no existe (RN6) → actualizar el evento con resultado y respuesta → responder.
+**Ingesta de evento:** dispositivo/simulador → `POST /api/v1/events` → auth dispositivo → rate-limit
+por dispositivo (429 `rate_limited`) → ¿`(device_id, event_id)` ya existe? → sí: devolver respuesta
+almacenada (RN7) → no: resolver carnet → **insertar `rfid_events` (siempre, RN1)** → buscar/crear
+sesión en ventana (RN2/RN3) → verificar inscripción → insertar asistencia si no existe (RN6) →
+actualizar el evento con resultado y respuesta → responder.
 
 **Enrolamiento:** dispositivo en modo `enrollment` → UID desconocido → evento `enrollment_captured` → la web lista UIDs capturados sin asignar → admin crea estudiante o asocia a existente → se crea `cards`.
 

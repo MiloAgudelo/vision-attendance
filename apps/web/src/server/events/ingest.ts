@@ -6,16 +6,17 @@
  *
  * 1. Credencial `Authorization: Bearer` → 401 `invalid_credentials` si falta, está mal formada o no
  *    corresponde a ningún dispositivo. La búsqueda es **por SHA-256**, nunca por la key en claro.
- * 2. Dispositivo revocado → 403 `device_revoked`. `deviceId` distinto del de la credencial → 403
+ * 2. Rate-limit básico por dispositivo → 429 `rate_limited` si supera el cupo de la ventana.
+ * 3. Dispositivo revocado → 403 `device_revoked`. `deviceId` distinto del de la credencial → 403
  *    `device_mismatch`.
- * 3. Versión de contrato incompatible → 400 `unsupported_contract`; solo entonces se valida el
+ * 4. Versión de contrato incompatible → 400 `unsupported_contract`; solo entonces se valida el
  *    cuerpo completo → 400 `invalid_payload`.
- * 4. Idempotencia (RN7): si ya existe `(device_id, event_id)` se devuelve la respuesta almacenada,
+ * 5. Idempotencia (RN7): si ya existe `(device_id, event_id)` se devuelve la respuesta almacenada,
  *    tal cual, con 200 y sin reprocesar nada.
- * 5. Se resuelve el carnet por UID normalizado activo.
- * 6. **Se inserta siempre la fila en `rfid_events` (RN1)**: todo evento válido de un dispositivo
+ * 6. Se resuelve el carnet por UID normalizado activo.
+ * 7. **Se inserta siempre la fila en `rfid_events` (RN1)**: todo evento válido de un dispositivo
  *    autorizado queda registrado con su hora, pase lo que pase después.
- * 7. Se guarda en `rfid_events.response` el JSON exacto que se devuelve.
+ * 8. Se guarda en `rfid_events.response` el JSON exacto que se devuelve.
  *
  * Los resultados de negocio —incluidos los negativos— responden **200**: el firmware decide
  * LED/buzzer por `result`, no por el código HTTP. Los códigos de error son solo de transporte,
@@ -42,6 +43,10 @@ import { extractBearerApiKey } from '../devices/credentials';
 import { attendanceEngine as defaultAttendanceEngine } from '../attendance/engine';
 import type { AttendanceEngine } from './attendance-engine';
 import {
+  getEventRateLimiter,
+  type EventRateLimiter,
+} from './rate-limit';
+import {
   buildSuccessResponse,
   deviceErrorResult,
   replayStoredResponse,
@@ -62,6 +67,8 @@ export interface IngestDeviceEventOptions {
   attendanceEngine?: AttendanceEngine;
   /** Reloj del servidor. Inyectable para poder fijar `received_at` en las pruebas. */
   now?: () => Date;
+  /** Rate-limit por dispositivo. Inyectable en pruebas; por defecto el del proceso. */
+  rateLimiter?: EventRateLimiter;
 }
 
 /** Procesa un evento del lector y devuelve el par (código HTTP, cuerpo) exacto del contrato. */
@@ -71,6 +78,7 @@ export async function ingestDeviceEvent(
   const database = options.database ?? getDatabase();
   const attendanceEngine = options.attendanceEngine ?? defaultAttendanceEngine;
   const now = options.now ?? (() => new Date());
+  const rateLimiter = options.rateLimiter ?? getEventRateLimiter();
 
   /* 1. Credencial. */
   const apiKey = extractBearerApiKey(options.authorization);
@@ -79,7 +87,12 @@ export async function ingestDeviceEvent(
   const device = await findDeviceByApiKey(apiKey, { database });
   if (!device) return deviceErrorResult('invalid_credentials');
 
-  /* 2. Estado del dispositivo y coincidencia del `deviceId`. */
+  /* 2. Rate-limit por dispositivo autenticado (contrato: 429 `rate_limited`). */
+  if (!rateLimiter.allow(device.id, now().getTime())) {
+    return deviceErrorResult('rate_limited');
+  }
+
+  /* 3. Estado del dispositivo y coincidencia del `deviceId`. */
   if (device.status === 'revoked') return deviceErrorResult('device_revoked');
 
   // El contrato pone `device_mismatch` antes de la validación del cuerpo, así que el `deviceId` se
@@ -89,7 +102,7 @@ export async function ingestDeviceEvent(
     return deviceErrorResult('device_mismatch');
   }
 
-  /* 3. Versión de contrato y luego cuerpo completo. */
+  /* 4. Versión de contrato y luego cuerpo completo. */
   const probe = contractVersionProbeSchema.safeParse(options.body);
   if (probe.success && !isSupportedContractVersion(probe.data.contractVersion)) {
     return deviceErrorResult('unsupported_contract');
@@ -110,11 +123,11 @@ export async function ingestDeviceEvent(
     { database },
   );
 
-  /* 4. Idempotencia (RN7) antes de tocar nada más. */
+  /* 5. Idempotencia (RN7) antes de tocar nada más. */
   const alreadyProcessed = await findStoredResponse(database, device.id, event.eventId);
   if (alreadyProcessed !== null) return replayStoredResponse(alreadyProcessed);
 
-  /* 5–7. Resolución, registro incondicional y respuesta. */
+  /* 6–8. Resolución, registro incondicional y respuesta. */
   return database.transaction(async (tx) => {
     // La restricción única evita filas duplicadas, pero llega demasiado tarde para impedir que dos
     // solicitudes concurrentes ejecuten ambas el motor. Este lock transaccional serializa la clave
