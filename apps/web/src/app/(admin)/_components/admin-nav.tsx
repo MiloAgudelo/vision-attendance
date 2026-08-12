@@ -17,7 +17,16 @@ export function AdminNav() {
     <nav aria-label="Secciones de administración" className="flex flex-wrap gap-1">
       {ADMIN_SECTIONS.map((section) => {
         const active =
-          section.href === '/admin' ? pathname === '/admin' : pathname.startsWith(section.href);
+          section.href === '/admin'
+            ? pathname === '/admin'
+            : pathname === section.href ||
+              (pathname.startsWith(`${section.href}/`) &&
+                !ADMIN_SECTIONS.some(
+                  (other) =>
+                    other.href !== section.href &&
+                    other.href.startsWith(`${section.href}/`) &&
+                    (pathname === other.href || pathname.startsWith(`${other.href}/`)),
+                ));
 
         return (
           <Link

@@ -41,6 +41,17 @@ export const ADMIN_SECTIONS: readonly AdminSection[] = [
     description: 'Consulta del horario semanal de todos los grupos activos, en hora de Bogotá.',
   },
   {
+    href: '/devices',
+    label: 'Dispositivos',
+    description:
+      'Alta, revocación y modo de los lectores RFID autorizados a enviar eventos.',
+  },
+  {
+    href: '/devices/enrollment',
+    label: 'Enrolamiento',
+    description: 'Asocia a un estudiante los UID capturados por un lector en modo enrolamiento.',
+  },
+  {
     href: '/sessions',
     label: 'Sesiones',
     description: 'Tablero de aula: sesiones en vivo, roster de presentes y ausentes, historial.',
