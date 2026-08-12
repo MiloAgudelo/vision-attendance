@@ -1,0 +1,23 @@
+{
+  "name": "@va/e2e",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pruebas e2e del flujo RFID con el simulador como cliente HTTP.",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@va/db": "workspace:*",
+    "@va/shared": "workspace:*",
+    "@va/simulator": "workspace:*",
+    "drizzle-orm": "^0.45.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "typescript": "5.9.3",
+    "vitest": "^4.1.10"
+  }
+}
