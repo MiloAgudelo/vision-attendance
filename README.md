@@ -11,11 +11,12 @@ de entrada, exista o no una sesión de clase que coincida** (RN1).
 > Documentación normativa en [`docs/`](docs/):
 > [alcance](docs/alcance-v2.md) · [arquitectura](docs/architecture.md) ·
 > [modelo de datos](docs/data-model.md) · [contrato del dispositivo](docs/device-contract.md) ·
+> [seguridad](docs/security.md) · [despliegue](docs/deploy.md) ·
 > [playbook de agentes](docs/agent-playbook.md).
 
-**Estado:** fundaciones. Existen el monorepo, el contrato del dispositivo, el esquema completo de
-la base de datos y el esqueleto de la aplicación web. Todavía no hay pantallas de administración,
-ingesta de eventos ni vista de asistencia en vivo.
+**Estado:** MVP de software listo para piloto. Monorepo, contrato v1, esquema completo, ingesta
+RFID, motor de asistencia, Auth por roles, UI de sesión en vivo, simulador, e2e y revisión de
+seguridad. El firmware ESP32 es un track paralelo (gate de UID en `docs/alcance-v2.md` §18).
 
 ## Requisitos
 
@@ -39,6 +40,18 @@ pnpm dev                     # http://localhost:3000
 Comprobación rápida: `curl http://localhost:3000/api/health` devuelve
 `{"ok":true,"db":"up"}` (y `503` con `{"ok":false,"db":"down"}` si la base no responde).
 
+Auth local: rellena `NEXT_PUBLIC_SUPABASE_URL` y la anon/publishable key en `.env` cuando conectes
+un proyecto Supabase (local o remoto). Sin esas variables la app arranca, pero el login no opera.
+Los usuarios de `pnpm db:seed` (`admin@vision.local`, etc.) solo existen en `public.users`; en un
+proyecto Auth real el UUID de `auth.users` debe coincidir (ver [`docs/deploy.md`](docs/deploy.md)).
+
+Simulador (tras el seed):
+
+```bash
+# PowerShell: $env:SIM_KEY = 'vad_…'  (la imprime db:seed)
+pnpm --filter @va/simulator sim -- enviar --uid A1B2C3D4
+```
+
 Para terminar la jornada, `pnpm db:down` detiene la base de datos local; el servidor sigue en pie
 entre sesiones si no se detiene.
 
@@ -47,8 +60,8 @@ entre sesiones si no se detiene.
 ```bash
 pnpm lint         # ESLint sobre todo el repositorio
 pnpm typecheck    # TypeScript en modo estricto en todos los paquetes
-pnpm test         # Vitest en todos los paquetes
-pnpm build        # compila @va/shared, @va/db y la aplicación Next.js
+pnpm test         # Vitest (shared, db, simulador, web, e2e)
+pnpm build        # compila @va/shared, @va/db, simulador y la aplicación Next.js
 pnpm format       # aplica Prettier (pnpm format:check solo comprueba)
 ```
 
@@ -58,12 +71,13 @@ sobre un PostgreSQL 17 efímero.
 ## Estructura del monorepo
 
 ```
-apps/web         @va/web    — Next.js (App Router): interfaz en español y API de dispositivos
-packages/shared  @va/shared — tipos de dominio, enums y contrato del dispositivo (paquete hoja)
-packages/db      @va/db     — esquema Drizzle, migraciones SQL, cliente y datos de desarrollo
-tools/simulator  @va/simulator — CLI que simula el ESP32 (pendiente, lane W3)
+apps/web         @va/web       — Next.js (App Router): UI en español + API de dispositivos
+packages/shared  @va/shared    — tipos de dominio, enums y contrato del dispositivo (paquete hoja)
+packages/db      @va/db        — esquema Drizzle, migraciones SQL, cliente y seed de desarrollo
+tools/simulator  @va/simulator — CLI que simula el ESP32 contra POST /api/v1/events
+e2e              @va/e2e       — flujo completo y matriz del alcance con el simulador
 firmware/        ESP32 + RC522 (track paralelo, fuera del grafo de pnpm)
-docs/            documentación normativa
+docs/            documentación normativa y de operación
 ```
 
 ### Reglas de importación
@@ -76,7 +90,8 @@ docs/            documentación normativa
 | `tools/simulator` | `@va/shared`           | `@va/db`, `apps/*` (nunca toca la base) |
 
 El acceso a datos ocurre **solo en el servidor**: todas las tablas tienen RLS activado en modo
-deny-all y ningún componente de React habla con Drizzle directamente.
+deny-all y ningún componente de React habla con Drizzle directamente. Detalle en
+[`docs/security.md`](docs/security.md).
 
 Código, identificadores y esquema en **inglés**; textos de interfaz y mensajes en **español**.
 
@@ -92,7 +107,13 @@ esté disponible es una alternativa intercambiable sin tocar código. El detalle
 [README de `@va/db`](packages/db/README.md).
 
 En producción, `DATABASE_URL` apunta al Postgres de Supabase; el proyecto remoto lo conecta el
-responsable mediante `.env` (ver [`.env.example`](.env.example)).
+responsable mediante variables de entorno (ver [`.env.example`](.env.example) y
+[`docs/deploy.md`](docs/deploy.md)).
+
+## Despliegue
+
+Piloto previsto: **Vercel** (app) + **Supabase** (Postgres + Auth). Instrucciones paso a paso,
+sin que el agente cree recursos cloud: [`docs/deploy.md`](docs/deploy.md).
 
 ## Scripts de la raíz
 
