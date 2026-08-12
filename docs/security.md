@@ -18,7 +18,8 @@ Checklist de la revisión W6 (`docs/agent-playbook.md` §4). No sustituye el alc
 | ------------------------------- | ---------------------------------- | ------------------------------------------ |
 | `DATABASE_URL`                  | `.env` (no versionado)             | Solo servidor                              |
 | `SUPABASE_SERVICE_ROLE_KEY`     | `.env`                             | Nunca `NEXT_PUBLIC_*`                      |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | `.env` / cliente Auth              | Solo Auth; RLS deny-all bloquea datos      |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` / `…_PUBLISHABLE_KEY` | `.env` / cliente Auth | Solo Auth; RLS deny-all bloquea datos |
+
 | API key del dispositivo         | Hash SHA-256 en `devices.api_key_hash` | En claro solo al emitir / firmware `secrets.h` |
 | `firmware/**/secrets.h`         | Local del firmware                 | En `.gitignore` desde F1                   |
 
